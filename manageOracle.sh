@@ -134,7 +134,7 @@ installOracle() {
   elif [ "$ORACLE_VERSION" == "11.2.0.4" ] && [ "$ORACLE_EDITION" != "EE" -a "$ORACLE_EDITION" != "SE" ]
   then error "Database edition must be EE or SE for version 11.2.0.4"
   elif [ "$ORACLE_VERSION" == "11.2.0.2" ] && [ "$ORACLE_EDITION" != "XE" ]
-  then error "Database edition must be SE for version 11.2.0.2"
+  then error "Database edition must be XE for version 11.2.0.2"
   elif [ "$ORACLE_EDITION" == "SE" ]
   then error "Database edition SE is only available for version 11.2.0.4"
   fi
@@ -199,9 +199,14 @@ installOracle() {
          *) checkSum $INSTALL_DIR/Checksum.${ORACLE_EDITION} zip;;
        esac
 
-#       unzip -q -d $INSTALL_DIR $INSTALL_DIR/"*.zip"
        chown -R oracle:oinstall $INSTALL_DIR/*
-       sudo su - oracle -c "$INSTALL_DIR/database/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignoresysprereqs -ignoreprereq"
+
+       # Match the install command to the version
+       case $ORACLE_VERSION in       
+            18.*|19.*) sudo su - oracle -c "$ORACLE_HOME/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignorePrereqFailure" ;;
+                    *) sudo su - oracle -c "$INSTALL_DIR/database/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignoresysprereqs -ignoreprereq" ;;
+       esac
+
          if [ ! "$($ORACLE_HOME/perl/bin/perl -v)" ]
        then mv $ORACLE_HOME/perl $ORACLE_HOME/perl.old
             curl -o i$INSTALL_DIR/perl.tar.gz http://www.cpan.org/src/5.0/perl-5.14.1.tar.gz
