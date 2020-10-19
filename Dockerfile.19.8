@@ -95,12 +95,13 @@ FROM base as db
 
 # DB installation defaults
 ARG INSTALL_DIR=/opt/install
-ARG INSTALL_RESPONSE=oracle-${ORACLE_VERSION}-${ORACLE_EDITION}.conf
+#ARG INSTALL_RESPONSE=oracle-${ORACLE_VERSION}-${ORACLE_EDITION}.conf
+ARG INSTALL_RESPONSE=inst.rsp
 ARG INIT_FILE=oracledb_ORCLCDB-19c
 ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PILOT,SQLD,SUP,UCP,TCP,ZIP"
 
 # Copy DB install files
-COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/ $INSTALL_DIR/
+COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/* $INSTALL_DIR/
 
 # Install DB software binaries
 RUN bash -x $SCRIPTS_DIR/$MANAGE_ORACLE -O
