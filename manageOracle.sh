@@ -119,7 +119,11 @@ checkSum() {
        # md5sum is present and values do not match
          if [ "$(type md5sum 2>/dev/null)" ] && [ !"$(md5sum $INSTALL_DIR/$filename | awk '{print $1}')" == "$checksum_value" ]
        then error "Checksum for $filename did not match"
-       else unzip -q -d $INSTALL_DIR $INSTALL_DIR/$filename
+       else # Unzip to the correct directory--ORACLE_HOME for 18c/19c, INSTALL_DIR for others
+            case $ORACLE_VERSION in
+                 18.*|19.*) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/$filename" ;;
+                         *) sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/$filename" ;;
+            esac
        fi
   done
 }
@@ -193,13 +197,14 @@ installOracle() {
        chgrp oinstall /etc/sysconfig/oracle*
   else # Install Oracle from archive
 
+       # Handle versions with edition-specific installers, which have multiple Checksum files (1 per edition)
        case $(ls $INSTALL_DIR/Checksum* 2>/dev/null | wc -l) in
-         0) unzip -q -d $INSTALL_DIR $INSTALL_DIR/"*.zip";;
-         1) checkSum $INSTALL_DIR/Checksum zip;;
-         *) checkSum $INSTALL_DIR/Checksum.${ORACLE_EDITION} zip;;
+         0) unzip -q -d $INSTALL_DIR $INSTALL_DIR/"*.zip"i ;;
+         1) checkSum $INSTALL_DIR/Checksum zip ;;
+         *) checkSum $INSTALL_DIR/Checksum.${ORACLE_EDITION} zip ;;
        esac
 
-       chown -R oracle:oinstall $INSTALL_DIR/*
+#       chown -R oracle:oinstall $INSTALL_DIR/*
 
        # Match the install command to the version
        case $ORACLE_VERSION in       
