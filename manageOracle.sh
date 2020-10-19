@@ -199,7 +199,7 @@ installOracle() {
 
        # Handle versions with edition-specific installers, which have multiple Checksum files (1 per edition)
        case $(ls $INSTALL_DIR/Checksum* 2>/dev/null | wc -l) in
-         0) unzip -q -d $INSTALL_DIR $INSTALL_DIR/"*.zip"i ;;
+         0) unzip -q -d $INSTALL_DIR $INSTALL_DIR/"*.zip" ;;
          1) checkSum $INSTALL_DIR/Checksum zip ;;
          *) checkSum $INSTALL_DIR/Checksum.${ORACLE_EDITION} zip ;;
        esac
