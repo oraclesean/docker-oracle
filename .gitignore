@@ -1,0 +1,7 @@
+*/**/*.zip
+*/**/*.rpm
+.dockerignore
+*/install/patches/0*
+/demos
+/docker-images
+/docker-oracle

@@ -255,13 +255,14 @@ ls -l $INSTALL_DIR
          do cd $patchdir
               if [ $(find . -type f -name *.zip) ]
             then unzip -q *.zip
+                 chown -R oracle:oinstall .
                  cd */
                  # Get the apply command from the README
-grep -i opatch README.*
                  opatch_apply=$(egrep "opatch .apply" README.* | sort | head -1 | awk '{print $2}')
                  opatch_apply=${opatch_apply:-apply}
+                 patchdir=$(pwd)
                  # Apply the patch
-                 sudo su - oracle -c "$ORACLE_HOME/OPatch/opatch $opatch_apply -silent"
+                 sudo su - oracle -c "$ORACLE_HOME/OPatch/opatch $opatch_apply -silent $patchdir"
                    if [ "$?" != "0" ]
                  then error "OPatch returned an error $rc"
                  fi
