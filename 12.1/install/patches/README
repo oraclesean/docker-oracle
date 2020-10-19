@@ -1,0 +1,5 @@
+Place the latest OPatch (p6880880) directly in the install directory ($ORACLE_VERSION/install).
+
+Create subdirectories for each patch under $ORACLE_VERSION/install/patches/. Begin with subdirectory 001, then 002, etc.
+
+Place the zip file for the first patch to be installed in directory 001, the second in 002, etc.
