@@ -206,11 +206,14 @@ installOracle() {
 
 #       chown -R oracle:oinstall $INSTALL_DIR/*
 
+       # Unset errors to prevent installer warnings from exiting
+       set +e
        # Match the install command to the version
        case $ORACLE_VERSION in       
             18.*|19.*) sudo su - oracle -c "$ORACLE_HOME/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignorePrereqFailure" ;;
                     *) sudo su - oracle -c "$INSTALL_DIR/database/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignoresysprereqs -ignoreprereq" ;;
        esac
+       set -e
 
          if [ ! "$($ORACLE_HOME/perl/bin/perl -v)" ]
        then mv $ORACLE_HOME/perl $ORACLE_HOME/perl.old
