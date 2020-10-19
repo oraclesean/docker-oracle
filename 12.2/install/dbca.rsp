@@ -1,21 +1,18 @@
-[GENERAL]
-RESPONSEFILE_VERSION = "12.1.0"
-OPERATION_TYPE = "createDatabase"
-[CREATEDATABASE]
-GDBNAME = "###ORACLE_SID###"
-SID = "###ORACLE_SID###"
-CREATEASCONTAINERDATABASE = "###CREATE_CONTAINER###"
-NUMBEROFPDBS = ###PDBS###
-PDBNAME = "###PDB_NAME###"
-PDBADMINPASSWORD = "###ORACLE_PWD###"
-TEMPLATENAME = "General_Purpose.dbc"
-SYSPASSWORD = "###ORACLE_PWD###"
-SYSTEMPASSWORD = "###ORACLE_PWD###"
-EMCONFIGURATION = "DBEXPRESS"
-EMEXPRESSPORT = "5500"
-DBSNMPPASSWORD = "###ORACLE_PWD###"
-CHARACTERSET = "###ORACLE_CHARACTERSET###"
-NATIONALCHARACTERSET= "###ORACLE_NLS_CHARACTERSET###"
-INITPARAMS = db_recovery_file_dest=/opt/oracle/oradata/fast_recovery_area,audit_trail=none,audit_sys_operations=false
-AUTOMATICMEMORYMANAGEMENT = "FALSE"
-TOTALMEMORY = "2048"
+responseFileVersion=/oracle/assistants/rspfmt_dbca_response_schema_v12.2.0
+gdbName=###ORACLE_SID###
+sid=###ORACLE_SID###
+createAsContainerDatabase=###CREATE_CONTAINER###
+numberOfPDBs=###PDBS###
+pdbName=###PDB_NAME###
+pdbAdminPassword=###ORACLE_PWD###
+templateName=General_Purpose.dbc
+sysPassword=###ORACLE_PWD###
+systemPassword=###ORACLE_PWD###
+emConfiguration=DBEXPRESS
+emExpressPort=5500
+dbsnmpPassword=###ORACLE_PWD###
+characterSet=###ORACLE_CHARACTERSET###
+nationalCharacterSet=###ORACLE_NLS_CHARACTERSET###
+initParams=db_recovery_file_dest=/opt/oracle/oradata/fast_recovery_area,audit_trail=none,audit_sys_operations=false
+automaticMemoryManagement=FALSE
+totalMemory=2048
