@@ -105,9 +105,6 @@ configENV() {
   chown -R oracle:oinstall $SCRIPTS_DIR $ORACLE_INV $ORACLE_BASE $ORADATA                            || error "Failure changing directory ownership."
   ln -s $ORACLE_BASE/scripts /docker-entrypoint-initdb.d                                             || error "Failure setting Docker entrypoint."
   echo oracle:oracle | chpasswd                                                                      || error "Failure setting the oracle user password."
-  #    # Let oracle run rpm config:
-  #    echo "oracle ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/oracle && \
-  #    chmod 0440 /etc/sudoers.d/oracle && \
   yum clean all
 }
 
@@ -633,12 +630,6 @@ then # No PDB name but PDB count > 0
 else export ORACLE_SID=$__oracle_sid
      export ORACLE_PDB=$__oracle_pdb
 fi
-
-#  # Make ORACLE_SID upper case
-#  export ORACLE_SID=${ORACLE_SID^^}
-
-## Make ORACLE_PDB upper case
-#export ORACLE_PDB=${ORACLE_PDB^^}
 
 # Check the audit path
   if [ ! -d $ORACLE_BASE/admin/$ORACLE_SID/adump ]
