@@ -95,7 +95,7 @@ ARG INIT_FILE=oracle-xe
 ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PILOT,SQLD,SUP,UCP,TCP,ZIP"
 
 # Copy DB install files
-COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/* $INSTALL_DIR/
+COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/ $INSTALL_DIR/
 
 # Install DB software binaries
 #USER oracle

@@ -254,13 +254,11 @@ echo "Checking for patches"
 ls -l $INSTALL_DIR
 
   # Check for OPatch
-#         if [ -d "$INSTALL_DIR/OPatch" ]
-#       then rm -fr $ORACLE_HOME/OPatch
     if [ "$(find $INSTALL_DIR -type f -name p6880880*.zip 2>/dev/null)" ]
   then sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/p6880880*.zip"
-#       sudo su - oracle -c "mv $INSTALL_DIR/OPatch $ORACLE_HOME/"
   fi
-
+ls -l $INSTALL_DIR/patches
+ls -l $INSTALL_DIR/patches/001
        # Check for patches
     if [ -d "$INSTALL_DIR/patches" ] 
   then
