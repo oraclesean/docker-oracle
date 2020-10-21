@@ -24,6 +24,7 @@ ARG SQLPATH=/home/oracle
 # Build defaults
 ARG RPM_LIST="oracle-epel-release-el7 file-5.11 git less strace sudo vi which"
 ARG RPM_SUPPLEMENT="rlwrap oracle-rdbms-server-11gR2-preinstall"
+ARG VOLUME_GROUP=
 ARG MIN_SPACE_GB=12
 ARG BUILD_DATE=
 ARG BUILD_VERSION=1.0
