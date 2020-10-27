@@ -103,16 +103,6 @@ configENV() {
 
   mkdir -p {$ORACLE_INV,$ORACLE_HOME,$ORADATA/dbconfig,$ORACLE_BASE/{admin,scripts/{setup,startup}}} || error "Failure creating directories.\n"
   chown -R oracle:oinstall $SCRIPTS_DIR $ORACLE_INV $ORACLE_BASE $ORADATA                            || error "Failure changing directory ownership."
-  # VOLUME_GROUP permits non-oracle/oinstall ownership of bind-mounted volumes. VOLUME_GROUP is passed as GID:GROUP_NAME
-    if [ ! -z "$VOLUME_GROUP" ]
-  then local __gid=$(echo $VOLUME_GROUP | cut -d: -f1)
-       local __grp=$(echo $VOLUME_GROUP | cut -d: -f2)
-       groupadd -g $__gid $__grp
-       usermod oracle -aG $__grp
-       chown :$__grp $ORADATA
-       chmod 775 $ORADATA
-       chmod g+s $ORADATA
-  fi
   ln -s $ORACLE_BASE/scripts /docker-entrypoint-initdb.d                                             || error "Failure setting Docker entrypoint."
   echo oracle:oracle | chpasswd                                                                      || error "Failure setting the oracle user password."
   yum clean all
@@ -540,6 +530,25 @@ EOF
   fi
 }
 
+postInstallRoot() {
+  # Run root scripts in final build stage
+  $ORACLE_INV/orainstRoot.sh
+  $ORACLE_HOME/root.sh
+
+  # Additional steps to be performed as root
+
+  # VOLUME_GROUP permits non-oracle/oinstall ownership of bind-mounted volumes. VOLUME_GROUP is passed as GID:GROUP_NAME
+    if [ ! -z "$VOLUME_GROUP" ]
+  then local __gid=$(echo $VOLUME_GROUP | cut -d: -f1)
+       local __grp=$(echo $VOLUME_GROUP | cut -d: -f2)
+       groupadd -g $__gid $__grp
+       usermod oracle -aG $__grp
+       chown -R :$__grp $ORADATA
+       chmod -R 775 $ORADATA
+       chmod -R g+s $ORADATA
+  fi
+}
+
 runUserScripts() {
   local SCRIPTS_ROOT="$1";
 
@@ -593,6 +602,9 @@ while getopts ":ehOPR" opt; do
            P) # Change passwords
               # TODO: Get the password from the CLI
               changePassword
+              exit 0 ;;
+           R) # Post install root scripts
+              postInstallRoot
               exit 0 ;;
       esac
  done

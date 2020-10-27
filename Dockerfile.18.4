@@ -27,7 +27,6 @@ ARG SQLPATH=/home/oracle
 ARG RPM_LIST="oracle-epel-release-el7 file-5.11 git less strace sudo vi which"
 ARG RPM_SUPPLEMENT="rlwrap"
 ARG MIN_SPACE_GB=13
-ARG VOLUME_GROUP=
 ARG BUILD_DATE=
 ARG BUILD_VERSION=1.0
 
@@ -105,7 +104,7 @@ ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PILOT,SQLD,SUP,UCP,TCP,ZIP"
 COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/ $INSTALL_DIR/
 
 # Install DB software binaries
-RUN bash -x $SCRIPTS_DIR/$MANAGE_ORACLE -O
+RUN $SCRIPTS_DIR/$MANAGE_ORACLE -O
 
 #----------------------------------------------------------#
 #                                                          #
@@ -121,8 +120,7 @@ COPY --chown=oracle:oinstall --from=db $ORACLE_BASE $ORACLE_BASE
 COPY --chown=oracle:oinstall --from=db $ORADATA     $ORADATA
 
 USER root
-RUN $ORACLE_INV/orainstRoot.sh && \
-    $ORACLE_HOME/root.sh
+RUN $SCRIPTS_DIR/$MANAGE_ORACLE -R
 
 USER oracle
 WORKDIR /home/oracle

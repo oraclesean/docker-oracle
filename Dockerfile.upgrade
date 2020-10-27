@@ -1,3 +1,6 @@
+FROM oraclelinux:7-db
+MAINTAINER Sean Scott <sean.scott@viscosityna.com>
+
 #----------------------------------------------------------#
 #                                                          #
 #                Oracle Database Dockerfile                #
@@ -10,12 +13,15 @@ FROM oraclelinux:7-slim as base
 
 # Database defaults
 ARG ORACLE_BASE=/opt/oracle
-ARG ORACLE_HOME=/opt/oracle/product/11.2.0.4/dbhome_1
+ARG ORACLE_HOME=/opt/oracle/product/12.1.0.2/dbhome_1
+ARG ORACLE_19C_HOME=/opt/oracle/product/19c/dbhome_1
 ARG ORACLE_INV=/opt/oracle/oraInventory
 ARG ORADATA=$ORACLE_BASE/oradata
-ARG ORACLE_VERSION=11.2.0.4
+ARG ORACLE_VERSION=12.1
 ARG ORACLE_EDITION=EE
-ARG ORACLE_SID=ORCL
+ARG ORACLE_SID=ORCLCDB
+ARG ORACLE_PDB=ORCLPDB
+ARG PDB_COUNT=1
 
 # Directory defaults
 ARG SCRIPTS_DIR=/opt/scripts
@@ -23,7 +29,7 @@ ARG SQLPATH=/home/oracle
 
 # Build defaults
 ARG RPM_LIST="oracle-epel-release-el7 file-5.11 git less strace sudo vi which"
-ARG RPM_SUPPLEMENT="rlwrap oracle-rdbms-server-11gR2-preinstall"
+ARG RPM_SUPPLEMENT="rlwrap"
 ARG MIN_SPACE_GB=12
 ARG BUILD_DATE=
 ARG BUILD_VERSION=1.0
@@ -39,7 +45,7 @@ LABEL org.label-schema.build-date="$BUILD_DATE"
 LABEL org.label-schema.vcs-url="https://github.com/oraclesean"
 LABEL org.label-schema.name="oraclesean/oracledb-$ORACLE_VERSION-$ORACLE_EDITION"
 LABEL org.label-schema.description="Extensible Oracle $ORACLE_VERSION database"
-LABEL org.label-schema.docker.cmd="docker run -d --name <CONTAINER_NAME> -e ORACLE_SID=<ORACLE SID> <IMAGE NAME>"
+LABEL org.label-schema.docker.cmd="docker run -d --name <CONTAINER_NAME> -e PDB_COUNT=<PDB COUNT> -e ORACLE_SID=<ORACLE SID> -e ORACLE_PDB=<PDB PREFIX> <IMAGE NAME>"
 LABEL maintainer="Sean Scott <sean.scott@viscosityna.com>"
 LABEL database.version="$ORACLE_VERSION"
 LABEL database.edition="$ORACLE_EDITION"
@@ -54,15 +60,20 @@ LABEL port.listener.listener1="1521"
 LABEL port.oemexpress="5500"
 LABEL port.http="8080"
 LABEL database.default.sid="$ORACLE_SID"
+LABEL database.default.pdb="$ORACLE_PDB"
+LABEL database.default.pdb_count="$PDB_COUNT"
 
 # Environment settings
 ENV ORACLE_BASE=$ORACLE_BASE \
     ORACLE_HOME=$ORACLE_HOME \
+    ORACLE_19C_HOME=/opt/oracle/product/19c/dbhome_1 \
     ORACLE_INV=$ORACLE_INV \
     ORADATA=$ORADATA \
     ORACLE_VERSION=$ORACLE_VERSION \
     ORACLE_EDITION=$ORACLE_EDITION \
     ORACLE_SID=$ORACLE_SID \
+    ORACLE_PDB=$ORACLE_PDB \
+    PDB_COUNT=$PDB_COUNT \
     SQLPATH=$SQLPATH \
     SCRIPTS_DIR=$SCRIPTS_DIR \
     MANAGE_ORACLE=$MANAGE_ORACLE
@@ -81,42 +92,27 @@ RUN chmod ug+x $SCRIPTS_DIR/*.sh && \
 
 #----------------------------------------------------------#
 #                                                          #
-#           Database Software Installation Stage           #
+#                 Copy source, target Homes                #
 #                                                          #
 #----------------------------------------------------------#
-
-FROM base as db
-
-# DB installation defaults
-ARG INSTALL_DIR=/opt/install
-ARG INSTALL_RESPONSE=inst.rsp
-ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PILOT,SQLD,SUP,UCP,TCP,ZIP"
-
-# Copy DB install files
-COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/ $INSTALL_DIR/
-
-# Install DB software binaries
-#USER oracle
-RUN bash -x $SCRIPTS_DIR/$MANAGE_ORACLE -O
-
-#----------------------------------------------------------#
-#                                                          #
-#                 Create a Database Runtime                #
-#                                                          #
-#----------------------------------------------------------#
-
 FROM base
 
-USER oracle
-COPY --chown=oracle:oinstall --from=db $ORACLE_INV  $ORACLE_INV
-COPY --chown=oracle:oinstall --from=db $ORACLE_BASE $ORACLE_BASE
-COPY --chown=oracle:oinstall --from=db $ORADATA     $ORADATA
+# Source directories
+COPY --chown=oracle:oinstall --from=oraclesean/db:12.1-ee $ORACLE_INV  $ORACLE_INV
+COPY --chown=oracle:oinstall --from=oraclesean/db:12.1-ee $ORACLE_BASE $ORACLE_BASE
+COPY --chown=oracle:oinstall --from=oraclesean/db:12.1-ee $ORADATA     $ORADATA
+COPY --chown=oracle:oinstall --from=oraclesean/db:12.1-ee $SCRIPTS_DIR $SCRIPTS_DIR
+
+# Target OH
+COPY --chown=oracle:oinstall --from=oraclesean/db:19.9-ee $ORACLE_19C_HOME $ORACLE_19C_HOME
 
 USER root
 RUN $ORACLE_INV/orainstRoot.sh && \
-    $ORACLE_HOME/root.sh
+    $ORACLE_HOME/root.sh && \
+    $ORACLE_19C_HOME/root.sh
 
 USER oracle
+RUN $ORACLE_19C_HOME/oui/bin/attachHome.sh
 WORKDIR /home/oracle
 
 VOLUME ["$ORADATA"]
