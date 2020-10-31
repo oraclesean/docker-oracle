@@ -15,7 +15,7 @@ FROM oraclelinux:7-slim as base
 ARG ORACLE_BASE=/opt/oracle
 ARG ORACLE_HOME=/opt/oracle/product/12.1.0.2/dbhome_1
 ARG TARGET_HOME=/opt/oracle/product/19c/dbhome_1
-ARG ORACLE_INV=/opt/oracle/oraInventory
+ARG ORACLE_INV=/opt/oraInventory
 ARG ORADATA=$ORACLE_BASE/oradata
 ARG ORACLE_VERSION=12.1
 ARG ORACLE_EDITION=EE
