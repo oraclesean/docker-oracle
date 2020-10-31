@@ -32,7 +32,7 @@ ${VERSION}
 └── install
     ├── Checksum
     ├── oracle-${VERSION}-${EDITION}.conf
-    ├── dbca.${VERSION}rsp
+    ├── dbca.rsp
     ├── inst.rsp
     ├── DATABASE.zip
     ├── DATABASE.rpm
@@ -45,7 +45,7 @@ ${VERSION}
 ```
 - `Checksum`: md5 hash and file names for the database install and/or RPM files.
 - `oracle-${VERSION}-${EDITION}.conf`: RPM install configuration required for 11g and 18c XE installations.
-- `dbca.${VERSION}rsp`: Versioned template response file for DBCA.
+- `dbca.rsp`: Template response file for DBCA.
 - `inst.rsp`: Template response file for `runInstall`.
 - `DATABASE.zip` and/or `DATABASE.rpm`: Database installers. If an `.rpm` file is present, the RPM installation is used.
 - `p6880880_*.zip`: (Optional) OPatch file applied directly to `ORACLE_HOME`.

@@ -84,7 +84,7 @@ ENV PATH=$ORACLE_HOME/bin:$ORACLE_HOME/OPatch/:/usr/sbin:$PATH \
     LD_LIBRARY_PATH=$ORACLE_HOME/lib:/usr/lib \
     TNS_ADMIN=$ORACLE_HOME/network/admin
 
-COPY $MANAGE_ORACLE $TARGET_VERSION/install/dbca* $SCRIPTS_DIR/
+COPY $MANAGE_ORACLE $ORACLE_VERSION/install/dbca* $SCRIPTS_DIR/
 
 # Build base image:
 RUN chmod ug+x $SCRIPTS_DIR/*.sh && \

@@ -130,6 +130,7 @@ checkSum() {
 installOracle() {
   set -e
 
+  # Default the version and home, use local values to allow multi-home installations
   local __version=${1:-$ORACLE_VERSION}
   local __oracle_home=${2:-$ORACLE_HOME}
 
@@ -185,7 +186,7 @@ installOracle() {
        export OLD_HOME=$(egrep "^export ORACLE_HOME" $INIT_FILE | cut -d= -f2 | tr -d '[:space:]')
        export OLD_BASE=$(echo $OLD_HOME | sed -e "s|/product.*$||g")
        export OLD_INV=$(egrep "^inventory_loc" $OLD_HOME/oraInst.loc | cut -d= -f2)
-#         if [[ ! $OLD_BASE -ef $ORACLE_BASE ]] || [[ ! $OLD_HOME -ef $ORACLE_HOME ]] || [[ ! $OLD_INV -ef $ORACLE_INV ]]
+
          if ! [[ $OLD_BASE -ef $ORACLE_BASE ]] || ! [[ $OLD_HOME -ef $__oracle_home ]] || ! [[ $OLD_INV -ef $ORACLE_INV ]]
        then 
             # Directories cannot be changed in XE. It does not have the ability to relink.
@@ -278,9 +279,6 @@ installOracle() {
        fi
 
   fi
-
-echo "Checking for patches"
-ls -l $INSTALL_DIR
 
   # Check for OPatch
     if [ "$(find $INSTALL_DIR -type f -name p6880880*.zip 2>/dev/null)" ]
@@ -386,14 +384,14 @@ stopDB() {
 
 runDBCA() {
   local __version=$(echo $ORACLE_VERSION | cut -d. -f1)
-  local __dbcaresponse=$ORACLE_BASE/dbca.$ORACLE_VERSION.$ORACLE_SID.rsp
+  local __dbcaresponse=$ORACLE_BASE/dbca.$ORACLE_SID.rsp
 
   $ORACLE_HOME/bin/lsnrctl start
   unset __pdb_only
 
   logger "\n${FUNCNAME[0]}: Running DBCA for database $ORACLE_SID"
 
-  cp $SCRIPTS_DIR/dbca.$ORACLE_VERSION.rsp $__dbcaresponse
+  cp $SCRIPTS_DIR/dbca.rsp $__dbcaresponse
 
     if [ "$__version" != "11" ] && [ ! -z "$PDB_LIST" ]
   then OLDIFS=$IFS
@@ -432,7 +430,7 @@ runDBCA() {
        fi
        alterPluggableDB
   else logger "\n${FUNCNAME[0]}: Creating database $ORACLE_SID \n"
-#       cp $SCRIPTS_DIR/dbca.$ORACLE_VERSION.rsp $ORACLE_BASE/dbca.$ORACLE_VERSION.$ORACLE_SID.rsp
+#       cp $SCRIPTS_DIR/dbca.rsp $ORACLE_BASE/dbca.$ORACLE_SID.rsp
        createDatabase $__dbcaresponse FALSE
        PDBENV="unset ORACLE_PDB"
   fi
