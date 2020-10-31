@@ -31,11 +31,11 @@ Each version has a subdirectory tree such as:
 ${VERSION}
 └── install
     ├── Checksum
-    ├── dbca.rsp
+    ├── oracle-${VERSION}-${EDITION}.conf
+    ├── dbca.${VERSION}rsp
     ├── inst.rsp
     ├── DATABASE.zip
     ├── DATABASE.rpm
-    ├── oracle-${VERSION}-${EDITION}.conf
     ├── p6880880_*.zip
     └── patches
         ├── 001
@@ -44,10 +44,10 @@ ${VERSION}
             └── patch2.zip
 ```
 - `Checksum`: md5 hash and file names for the database install and/or RPM files.
-- `dbca.rsp`: Template response file for DBCA.
+- `oracle-${VERSION}-${EDITION}.conf`: RPM install configuration required for 11g and 18c XE installations.
+- `dbca.${VERSION}rsp`: Versioned template response file for DBCA.
 - `inst.rsp`: Template response file for `runInstall`.
 - `DATABASE.zip` and/or `DATABASE.rpm`: Database installers. If an `.rpm` file is present, the RPM installation is used.
-- `oracle-${VERSION}-${EDITION}.conf`: Artifact of "normal" RPM installation. To be removed once confirmed to be unnecessary (installation is run from `$ORACLE_HOME/bin/dbca` regardless of the installation method).
 - `p6880880_*.zip`: (Optional) OPatch file applied directly to `ORACLE_HOME`.
 - `patches/*`: (Optional) Subdirectories containing patch archives to be applied during database installation, one patch per subdirectory.
 ## Flexible Image Creation
