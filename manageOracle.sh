@@ -80,8 +80,10 @@ configENV() {
   then error "The build requires at least $__min_space_gb GB free space.\n"
   fi
 
+  local __version=${1:-$ORACLE_VERSION}
+
     # Set the default RPM by version:
-  case $ORACLE_VERSION in
+  case $__version in
        11.*)     local __rpm_list="oracle-database-preinstall-19c openssl" ;;
        12.1*)    local __rpm_list="oracle-rdbms-server-12cR1-preinstall openssl tar" ;;
        12.2*)    local __rpm_list="oracle-database-server-12cR2-preinstall openssl" ;;
@@ -128,36 +130,43 @@ checkSum() {
 installOracle() {
   set -e
 
+  local __version=${1:-$ORACLE_VERSION}
+  local __oracle_home=${2:-$ORACLE_HOME}
+
     if [ -z "$ORACLE_EDITION" ]
   then error "A database edition is required"
   elif [ "$ORACLE_EDITION" != "EE" -a "$ORACLE_EDITION" != "SE" -a "$ORACLE_EDITION" != "SE2" -a "$ORACLE_EDITION" != "XE" ]
   then error "Database edition must be one of EE, SE, SE2, or XE"
-  elif [ "$ORACLE_VERSION" == "11.2.0.4" ] && [ "$ORACLE_EDITION" != "EE" -a "$ORACLE_EDITION" != "SE" ]
+  elif [ "$__version" == "11.2.0.4" ] && [ "$ORACLE_EDITION" != "EE" -a "$ORACLE_EDITION" != "SE" ]
   then error "Database edition must be EE or SE for version 11.2.0.4"
-  elif [ "$ORACLE_VERSION" == "11.2.0.2" ] && [ "$ORACLE_EDITION" != "XE" ]
+  elif [ "$__version" == "11.2.0.2" ] && [ "$ORACLE_EDITION" != "XE" ]
   then error "Database edition must be XE for version 11.2.0.2"
   elif [ "$ORACLE_EDITION" == "SE" ]
   then error "Database edition SE is only available for version 11.2.0.4"
   fi
 
   checkDirectory $ORACLE_BASE
-  checkDirectory $ORACLE_HOME
+  checkDirectory $__oracle_home
+
+    if ! [[ $__oracle_home == $ORACLE_BASE/* ]]
+  then error "The ORACLE_HOME directory $__oracle_home must be a subdirectory of the ORACLE_BASE."
+  fi
 
   sed -i -e "s|###ORACLE_EDITION###|$ORACLE_EDITION|g" \
          -e "s|###ORACLE_INV###|$ORACLE_INV|g" \
          -e "s|###ORACLE_BASE###|$ORACLE_BASE|g" \
-         -e "s|###ORACLE_HOME###|$ORACLE_HOME|g" $INSTALL_DIR/$INSTALL_RESPONSE
+         -e "s|###ORACLE_HOME###|$__oracle_home|g" $INSTALL_DIR/$INSTALL_RESPONSE
 
   # Fix a problem that prevents root from su - oracle:
   sed -i -e "s|\(^session\s*include\s*system-auth\)|#\1|" /etc/pam.d/su
 
   # Install Oracle binaries
-    if [ -f "$(find $INSTALL_DIR/ -iregex .*oracle.*\.rpm.*)" ] || [ ! -z "$ORACLE_RPM" ] || [ "${ORACLE_DOCKER_INSTALL^^}" ]
+    if [ -f "$(find $INSTALL_DIR/ -type f -iregex .*oracle.*\.rpm.*)" ] || [ ! -z "$ORACLE_RPM" ]
   then # Install Oracle from RPM
        # The ORACLE_DOCKER_INSTALL environment variable is required for RPM installation to succeed
        export ORACLE_DOCKER_INSTALL=true
          if [ -z "$ORACLE_RPM" ]
-       then ORACLE_RPM=$(find $INSTALL_DIR/ -iregex .*oracle.*\.rpm.*)
+       then ORACLE_RPM=$(find $INSTALL_DIR/ -type f -iregex .*oracle.*\.rpm.*)
               if [[ $ORACLE_RPM =~ .*\.zip$ ]]
             then unzip -q $ORACLE_RPM
                  ORACLE_RPM=${ORACLE_RPM%.zip}
@@ -166,32 +175,55 @@ installOracle() {
 
        yum -y localinstall $ORACLE_RPM
 
+       # Determine the name of the init file used for RPM installation
+         if [ -z "$INIT_FILE" ]
+       then INIT_FILE=$(find /etc/init.d/* -maxdepth 1 -type f -regex '.*/oracle[db_|-xe].*')
+       else INIT_FILE=/etc/init.d/$INIT_FILE
+       fi
+
        # If different directories are passed to the build, move the directories and recompile.
-       export OLD_HOME=$(egrep "^export ORACLE_HOME" /etc/init.d/$INIT_FILE | cut -d= -f2 | tr -d '[:space:]')
+       export OLD_HOME=$(egrep "^export ORACLE_HOME" $INIT_FILE | cut -d= -f2 | tr -d '[:space:]')
        export OLD_BASE=$(echo $OLD_HOME | sed -e "s|/product.*$||g")
        export OLD_INV=$(egrep "^inventory_loc" $OLD_HOME/oraInst.loc | cut -d= -f2)
-         if [[ ! $OLD_BASE -ef $ORACLE_BASE ]] || [[ ! $OLD_HOME -ef $ORACLE_HOME ]] || [[ ! $OLD_INV -ef $ORACLE_INV ]]
+#         if [[ ! $OLD_BASE -ef $ORACLE_BASE ]] || [[ ! $OLD_HOME -ef $ORACLE_HOME ]] || [[ ! $OLD_INV -ef $ORACLE_INV ]]
+         if ! [[ $OLD_BASE -ef $ORACLE_BASE ]] || ! [[ $OLD_HOME -ef $__oracle_home ]] || ! [[ $OLD_INV -ef $ORACLE_INV ]]
        then 
             # Directories cannot be changed in XE. It does not have the ability to relink.
-              if [ "$ORACLE_EDITION" == "XE" ] # TODO: clone.pl is deprecated in 19c: -o "$(echo $ORACLE_VERSION | cut -c 1-2)" == "19"  ]
+              if [ "$ORACLE_EDITION" == "XE" ] # TODO: clone.pl is deprecated in 19c: -o "$(echo $__version | cut -c 1-2)" == "19"  ]
             then export ORACLE_HOME=$OLD_HOME
                  export ORACLE_BASE=$OLD_BASE
                  export ORACLE_INV=$OLD_INV
             fi
        
             # Move directories to new locations
-              if [[ ! $OLD_HOME -ef $ORACLE_HOME ]]; then mv $OLD_HOME/* $ORACLE_HOME/ && rm -fr $OLD_BASE/product; fi
-              if [[ ! $OLD_INV  -ef $ORACLE_INV ]];  then mv $OLD_INV/*  $ORACLE_INV/;  fi
-              if [[ ! $OLD_BASE -ef $ORACLE_BASE ]]; then mv $OLD_BASE/* $ORACLE_BASE/; fi
-            sed -i -e "s|^export ORACLE_HOME=.*$|export ORACLE_HOME=$ORACLE_HOME|g" \
-                   -e "s|^export TEMPLATE_NAME=.*$|export TEMPLATE_NAME=$INSTALL_TEMPLATE|g" \
-                   -e "s|^CONFIG_NAME=.*$|CONFIG_NAME=\"$INSTALL_RESPONSE\"|g" /etc/init.d/$INIT_FILE
-            chown -R oracle:oinstall $ORACLE_HOME
-            sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" $ORACLE_HOME/oraInst.loc
-            sudo su - oracle -c "$ORACLE_HOME/perl/bin/perl $ORACLE_HOME/clone/bin/clone.pl ORACLE_HOME=$ORACLE_HOME ORACLE_BASE=$ORACLE_BASE -defaultHomeName -invPtrLoc $ORACLE_HOME/oraInst.loc"
+              if ! [[ $OLD_INV  -ef $ORACLE_INV ]]
+            then mv $OLD_INV/* $ORACLE_INV/
+                  for inv in $(find / -name oraInst.loc)
+                   do sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" $inv
+                 done
+            fi
+
+              if ! [[ $OLD_HOME -ef $__oracle_home ]]
+            then mv $OLD_HOME/* $__oracle_home/
+                 chown -R oracle:oinstall $__oracle_home
+                 rm -fr $OLD_BASE/product
+                 sudo su - oracle -c "$__oracle_home/perl/bin/perl $__oracle_home/clone/bin/clone.pl ORACLE_HOME=$__oracle_home ORACLE_BASE=$ORACLE_BASE -defaultHomeName -invPtrLoc $__oracle_home/oraInst.loc"
+            fi
+
+              if ! [[ $OLD_BASE -ef $ORACLE_BASE ]]
+            then mv $OLD_BASE/* $ORACLE_BASE/
+            fi
+
+#            sed -i -e "s|^export ORACLE_HOME=.*$|export ORACLE_HOME=$__oracle_home|g" \
+#                   -e "s|^export TEMPLATE_NAME=.*$|export TEMPLATE_NAME=$INSTALL_TEMPLATE|g" \
+#                   -e "s|^CONFIG_NAME=.*$|CONFIG_NAME=\"$INSTALL_RESPONSE\"|g" $INIT_FILE
+#            chown -R oracle:oinstall $__oracle_home
+#            sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" $__oracle_home/oraInst.loc
+#            sudo su - oracle -c "$__oracle_home/perl/bin/perl $__oracle_home/clone/bin/clone.pl ORACLE_HOME=$__oracle_home ORACLE_BASE=$ORACLE_BASE -defaultHomeName -invPtrLoc $__oracle_home/oraInst.loc"
   	 fi
-       chgrp oinstall /etc/init.d/$INIT_FILE
-       chgrp oinstall /etc/sysconfig/oracle*
+#       chgrp oinstall $INIT_FILE
+#       chgrp oinstall /etc/sysconfig/oracle*
+
   else # Install Oracle from archive
 
        # Handle versions with edition-specific installers, which have multiple Checksum files (1 per edition)
@@ -206,41 +238,41 @@ installOracle() {
        # Unset errors to prevent installer warnings from exiting
        set +e
        # Match the install command to the version
-       case $ORACLE_VERSION in       
-            18.*|19.*) sudo su - oracle -c "$ORACLE_HOME/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignorePrereqFailure" ;;
+       case $__version in       
+            18.*|19.*) sudo su - oracle -c "$__oracle_home/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignorePrereqFailure" ;;
                     *) sudo su - oracle -c "$INSTALL_DIR/database/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignoresysprereqs -ignoreprereq" ;;
        esac
        set -e
 
-         if [ ! "$($ORACLE_HOME/perl/bin/perl -v)" ]
-       then mv $ORACLE_HOME/perl $ORACLE_HOME/perl.old
+         if [ ! "$($__oracle_home/perl/bin/perl -v)" ]
+       then mv $__oracle_home/perl $__oracle_home/perl.old
             curl -o i$INSTALL_DIR/perl.tar.gz http://www.cpan.org/src/5.0/perl-5.14.1.tar.gz
             tar -xzf $INSTALL_DIR/perl.tar.gz
             cd $INSTALL_DIR/perl-*
-            sudo su - oracle -c "./Configure -des -Dprefix=$ORACLE_HOME/perl -Doptimize=-O3 -Dusethreads -Duseithreads -Duserelocatableinc"
+            sudo su - oracle -c "./Configure -des -Dprefix=$__oracle_home/perl -Doptimize=-O3 -Dusethreads -Duseithreads -Duserelocatableinc"
             sudo su - oracle -c "make clean"
             sudo su - oracle -c "make"
             sudo su - oracle -c "make install"
 
             # Copy old binaries into new Perl directory
-            rm -fr $ORACLE_HOME/{lib,man}
-            cp -r $ORACLE_HOME/perl.old/lib/            $ORACLE_HOME/perl/
-            cp -r $ORACLE_HOME/perl.old/man/            $ORACLE_HOME/perl/
-            cp    $ORACLE_HOME/perl.old/bin/dbilogstrip $ORACLE_HOME/perl/bin/
-            cp    $ORACLE_HOME/perl.old/bin/dbiprof     $ORACLE_HOME/perl/bin/
-            cp    $ORACLE_HOME/perl.old/bin/dbiproxy    $ORACLE_HOME/perl/bin/
-            cp    $ORACLE_HOME/perl.old/bin/ora_explain $ORACLE_HOME/perl/bin/
-            rm -fr $ORACLE_HOME/perl.old
-            cd $ORACLE_HOME/lib
+            rm -fr $__oracle_home/{lib,man}
+            cp -r $__oracle_home/perl.old/lib/            $__oracle_home/perl/
+            cp -r $__oracle_home/perl.old/man/            $__oracle_home/perl/
+            cp    $__oracle_home/perl.old/bin/dbilogstrip $__oracle_home/perl/bin/
+            cp    $__oracle_home/perl.old/bin/dbiprof     $__oracle_home/perl/bin/
+            cp    $__oracle_home/perl.old/bin/dbiproxy    $__oracle_home/perl/bin/
+            cp    $__oracle_home/perl.old/bin/ora_explain $__oracle_home/perl/bin/
+            rm -fr $/perl.old
+            cd $__oracle_home/lib
             ln -sf ../javavm/jdk/jdk7/lib/libjavavm12.a
-            chown -R oracle:oinstall $ORACLE_HOME
+            chown -R oracle:oinstall $__oracle_home
 
             # Relink
-            cd $ORACLE_HOME/bin
+            cd $__oracle_home/bin
             sudo su - oracle -c "relink all"
               if [ "$?" -ne 0 ]
             then echo "Relink failed!"
-                 cat "$ORACLE_HOME/install/relink.log"
+                 cat "$__oracle_home/install/relink.log"
                  exit 1
             fi
        fi
@@ -252,7 +284,7 @@ ls -l $INSTALL_DIR
 
   # Check for OPatch
     if [ "$(find $INSTALL_DIR -type f -name p6880880*.zip 2>/dev/null)" ]
-  then sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/p6880880*.zip"
+  then sudo su - oracle -c "unzip -oq -d $__oracle_home $INSTALL_DIR/p6880880*.zip"
   fi
 
   # Check for patches
@@ -269,7 +301,7 @@ ls -l $INSTALL_DIR
                  opatch_apply=${opatch_apply:-apply}
                  patchdir=$(pwd)
                  # Apply the patch
-                 sudo su - oracle -c "$ORACLE_HOME/OPatch/opatch $opatch_apply -silent $patchdir"
+                 sudo su - oracle -c "$__oracle_home/OPatch/opatch $opatch_apply -silent $patchdir"
                    if [ "$?" != "0" ]
                  then error "OPatch returned an error $rc"
                  fi
@@ -287,29 +319,29 @@ ls -l $INSTALL_DIR
          do
             case $rc in
                  APEX)  # APEX
-                        rm -fr $ORACLE_HOME/apex 2>/dev/null ;;
+                        rm -fr $__oracle_home/apex 2>/dev/null ;;
                  DBMA)  # Database migration assistant
-                        rm -fr $ORACLE_HOME/dmu 2>/dev/null ;;
+                        rm -fr $__oracle_home/dmu 2>/dev/null ;;
                  DBUA)  # DBUA
-                        rm -fr $ORACLE_HOME/assistants/dbua 2>/dev/null ;;
+                        rm -fr $__oracle_home/assistants/dbua 2>/dev/null ;;
                  HELP)  # Help files
-                        rm -fr $ORACLE_HOME/network/tools/help 2>/dev/null ;;
+                        rm -fr $__oracle_home/network/tools/help 2>/dev/null ;;
                  ORDS)  # ORDS
-                        rm -fr $ORACLE_HOME/ords 2>/dev/null ;;
+                        rm -fr $__oracle_home/ords 2>/dev/null ;;
                  OUI)   # OUI inventory backups
-                        rm -fr $ORACLE_HOME/inventory/backup/* 2>/dev/null ;;
+                        rm -fr $__oracle_home/inventory/backup/* 2>/dev/null ;;
                  PILOT) # Pilot workflow
-                        rm -fr $ORACLE_HOME/install/pilot 2>/dev/null ;;
+                        rm -fr $__oracle_home/install/pilot 2>/dev/null ;;
                  SQLD)  # SQL Developer
-                        rm -fr $ORACLE_HOME/sqldeveloper 2>/dev/null ;;
+                        rm -fr $__oracle_home/sqldeveloper 2>/dev/null ;;
                  SUP)   # Support tools
-                        rm -fr $ORACLE_HOME/suptools 2>/dev/null ;;
+                        rm -fr $__oracle_home/suptools 2>/dev/null ;;
                  TNS)   # TNS samples
-                        rm -fr $ORACLE_HOME/network/admin/samples 2>/dev/null ;;
+                        rm -fr $__oracle_home/network/admin/samples 2>/dev/null ;;
                  UCP)   # UCP
-                        rm -fr $ORACLE_HOME/ucp 2>/dev/null ;;
+                        rm -fr $__oracle_home/ucp 2>/dev/null ;;
                  ZIP)   # Installation files
-                        rm -fr $ORACLE_HOME/lib/*.zip 2>/dev/null ;;
+                        rm -fr $__oracle_home/lib/*.zip 2>/dev/null ;;
             esac
        done
        IFS=$OLDIFS
@@ -354,11 +386,14 @@ stopDB() {
 
 runDBCA() {
   local __version=$(echo $ORACLE_VERSION | cut -d. -f1)
+  local __dbcaresponse=$ORACLE_BASE/dbca.$ORACLE_VERSION.$ORACLE_SID.rsp
 
   $ORACLE_HOME/bin/lsnrctl start
   unset __pdb_only
 
   logger "\n${FUNCNAME[0]}: Running DBCA for database $ORACLE_SID"
+
+  cp $SCRIPTS_DIR/dbca.$ORACLE_VERSION.rsp $__dbcaresponse
 
     if [ "$__version" != "11" ] && [ ! -z "$PDB_LIST" ]
   then OLDIFS=$IFS
@@ -370,8 +405,8 @@ runDBCA() {
               if [ "$PDB_NUM" -eq 1 ]
             then # Create the database and the first PDB
                  logger "\n${FUNCNAME[0]}: Creating container database $ORACLE_SID and pluggable database $PDB_NAME \n"
-                 cp $SCRIPTS_DIR/dbca.rsp $ORACLE_BASE/dbca.$ORACLE_SID.rsp
-                 createDatabase $ORACLE_BASE/dbca.$ORACLE_SID.rsp TRUE 1 $PDB_NAME $PDB_ADMIN
+#                 cp $__dbcatemplate $__dbcaresponse
+                 createDatabase $__dbcaresponse TRUE 1 $PDB_NAME $PDB_ADMIN
                  PDBENV="export ORACLE_PDB=$PDB_NAME"
             else # Create additional PDB
                  logger "\n${FUNCNAME[0]}: Creating pluggable database $PDB_NAME \n"
@@ -385,8 +420,8 @@ runDBCA() {
   elif [ "$__version" != "11" ] && [ "$PDB_COUNT" -gt 0 ]
   then PDB_ADMIN=PDBADMIN
        logger "\n${FUNCNAME[0]}: Creating container database $ORACLE_SID and $PDB_COUNT pluggable database(s) with name $ORACLE_PDB \n"
-       cp $SCRIPTS_DIR/dbca.rsp $ORACLE_BASE/dbca.$ORACLE_SID.rsp
-       createDatabase $ORACLE_BASE/dbca.$ORACLE_SID.rsp TRUE $PDB_COUNT $ORACLE_PDB $PDB_ADMIN
+#       cp $__dbcatemplate $__dbcaresponse
+       createDatabase $__dbcaresponse TRUE $PDB_COUNT $ORACLE_PDB $PDB_ADMIN
          if [ "$PDB_COUNT" -eq 1 ]
        then PDBENV="export ORACLE_PDB=$ORACLE_PDB"
             addTNSEntry $ORACLE_PDB
@@ -397,8 +432,8 @@ runDBCA() {
        fi
        alterPluggableDB
   else logger "\n${FUNCNAME[0]}: Creating database $ORACLE_SID \n"
-       cp $SCRIPTS_DIR/dbca.rsp $ORACLE_BASE/dbca.$ORACLE_SID.rsp
-       createDatabase $ORACLE_BASE/dbca.$ORACLE_SID.rsp FALSE
+#       cp $SCRIPTS_DIR/dbca.$ORACLE_VERSION.rsp $ORACLE_BASE/dbca.$ORACLE_VERSION.$ORACLE_SID.rsp
+       createDatabase $__dbcaresponse FALSE
        PDBENV="unset ORACLE_PDB"
   fi
   logger "\n${FUNCNAME[0]}: DBCA complete\n"
@@ -535,6 +570,11 @@ postInstallRoot() {
   $ORACLE_INV/orainstRoot.sh
   $ORACLE_HOME/root.sh
 
+  # If this is an upgrade image, run the target root script
+    if [ -d "$TARGET_HOME" -a -f "$TARGET_HOME/root.sh" ]
+  then $TARGET_HOME/root.sh
+  fi
+
   # Additional steps to be performed as root
 
   # VOLUME_GROUP permits non-oracle/oinstall ownership of bind-mounted volumes. VOLUME_GROUP is passed as GID:GROUP_NAME
@@ -585,7 +625,7 @@ ORACLE_CHARACTERSET=${ORACLE_CHARACTERSET:-AL32UTF8}
 ORACLE_NLS_CHARACTERSET=${ORACLE_NLS_CHARACTERSET:-AL16UTF16}
 
 # If a parameter is passed to the script, run the associated action.
-while getopts ":ehOPR" opt; do
+while getopts ":ehuOPRU" opt; do
       case ${opt} in
            h) # Check health of the database
               HealthCheck
@@ -596,8 +636,15 @@ while getopts ":ehOPR" opt; do
            e) # Configure environment
               configENV
               exit 0 ;;
+           u) # Configure upgrade environment
+                if [[ $TARGET_HOME == $ORACLE_BASE/* ]] 
+              then mkdir -p $TARGET_HOME || error "Failure creating target directory.\n"
+              else error "The target ORACLE_HOME directory $TARGET_HOME must be a subdirectory of the ORACLE_BASE."
+              fi
+              configENV $TARGET_VERSION
+              exit 0 ;;
            O) # Install Oracle
-              installOracle
+              installOracle $ORACLE_VERSION $ORACLE_HOME
               exit 0 ;;
            P) # Change passwords
               # TODO: Get the password from the CLI
@@ -605,6 +652,9 @@ while getopts ":ehOPR" opt; do
               exit 0 ;;
            R) # Post install root scripts
               postInstallRoot
+              exit 0 ;;
+           U) # Install Oracle upgrade home
+              installOracle $TARGET_VERSION $TARGET_HOME
               exit 0 ;;
       esac
  done
@@ -714,8 +764,6 @@ EOF
      then cat << EOF >> $HOME/.bashrc
 alias sqlplus="rlwrap \$ORACLE_HOME/bin/sqlplus"
 alias rman="rlwrap \$ORACLE_HOME/bin/rman"
-#alias startdb="sudo $ORADATA/dbconfig/$ORACLE_SID/$INIT_FILE start"
-#alias stopdb="sudo $ORADATA/dbconfig/$ORACLE_SID/$INIT_FILE stop"
 EOF
      fi
 
