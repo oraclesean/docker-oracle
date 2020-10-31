@@ -11,7 +11,7 @@ FROM oraclelinux:7-slim as base
 # Database defaults
 ARG ORACLE_BASE=/opt/oracle
 ARG ORACLE_HOME=$ORACLE_BASE/product/18c/dbhomeXE
-ARG ORACLE_INV=/opt/oracle/oraInventory
+ARG ORACLE_INV=/opt/oraInventory
 ARG ORADATA=$ORACLE_BASE/oradata
 ARG ORACLE_VERSION=18.4
 ARG ORACLE_EDITION=XE

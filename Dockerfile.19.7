@@ -11,7 +11,7 @@ FROM oraclelinux:7-slim as base
 # Database defaults
 ARG ORACLE_BASE=/opt/oracle
 ARG ORACLE_HOME=/opt/oracle/product/19c/dbhome_1
-ARG ORACLE_INV=/opt/oracle/oraInventory
+ARG ORACLE_INV=/opt/oraInventory
 ARG ORADATA=$ORACLE_BASE/oradata
 ARG ORACLE_VERSION=19.7
 ARG ORACLE_EDITION=EE
@@ -95,7 +95,6 @@ FROM base as db
 
 # DB installation defaults
 ARG INSTALL_DIR=/opt/install
-#ARG INSTALL_RESPONSE=oracle-${ORACLE_VERSION}-${ORACLE_EDITION}.conf
 ARG INSTALL_RESPONSE=inst.rsp
 ARG INIT_FILE=oracledb_ORCLCDB-19c
 ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PILOT,SQLD,SUP,UCP,TCP,ZIP"
@@ -104,7 +103,7 @@ ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PILOT,SQLD,SUP,UCP,TCP,ZIP"
 COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/ $INSTALL_DIR/
 
 # Install DB software binaries
-RUN bash -x $SCRIPTS_DIR/$MANAGE_ORACLE -O
+RUN $SCRIPTS_DIR/$MANAGE_ORACLE -O
 
 #----------------------------------------------------------#
 #                                                          #
