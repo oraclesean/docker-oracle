@@ -5,3 +5,4 @@
 /demos
 /docker-images
 /docker-oracle
+/upgrade/*.jar
