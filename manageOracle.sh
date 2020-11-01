@@ -72,6 +72,19 @@ checkDirectory() {
   fi
 }
 
+getPreinstall() {
+    # Set the default RPM by version:
+  case $1 in
+       11.*)   pre="oracle-database-preinstall-19c" ;;
+       12.1*)  pre="oracle-rdbms-server-12cR1-preinstall tar" ;;
+       12.2*)  pre="oracle-database-server-12cR2-preinstall" ;;
+       18.*)   pre="oracle-database-preinstall-18c" ;;
+       19.*)   pre="oracle-database-preinstall-19c" ;;
+  esac
+
+  export RPM_LIST="$pre $RPM_LIST" 
+}
+
 configENV() {
   set -e
 
@@ -80,23 +93,21 @@ configENV() {
   then error "The build requires at least $__min_space_gb GB free space.\n"
   fi
 
-  local __version=${1:-$ORACLE_VERSION}
+  getPreinstall $ORACLE_VERSION
 
-    # Set the default RPM by version:
-  case $__version in
-       11.*)     local __rpm_list="oracle-database-preinstall-19c openssl" ;;
-       12.1*)    local __rpm_list="oracle-rdbms-server-12cR1-preinstall openssl tar" ;;
-       12.2*)    local __rpm_list="oracle-database-server-12cR2-preinstall openssl" ;;
-       18.*)     local __rpm_list="oracle-database-preinstall-18c openssl" ;;
-       19.*)     local __rpm_list="oracle-database-preinstall-19c openssl" ;;
-  esac
+#    if [ ! -z "$RPM_LIST" ]
+#  then local __rpm_list="$__rpm_list $RPM_LIST"
+#  fi
 
-    if [ ! -z "$RPM_LIST" ]
-  then local __rpm_list="$__rpm_list $RPM_LIST"
-  fi
+     if [ ! -z "$TARGET_VERSION" ]
+   then getPreinstall $TARGET_VERSION
+   fi
+
+echo "************************"
+echo $RPM_LIST
 
   yum -y update
-  yum -y install $__rpm_list
+  yum -y install openssl $RPM_LIST
   sync
 
     if [ ! -z "$RPM_SUPPLEMENT" ]
