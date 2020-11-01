@@ -89,22 +89,19 @@ configENV() {
   set -e
 
   local __min_space_gb=${MIN_SPACE_GB:-12}
+  local __target_home=${TARGET_HOME:-$ORACLE_HOME}
+
     if [ ! "$(df -PB 1G / | tail -n 1 | awk '{print $4}')" -ge "$__min_space_gb" ]
   then error "The build requires at least $__min_space_gb GB free space.\n"
   fi
 
   getPreinstall $ORACLE_VERSION
 
-#    if [ ! -z "$RPM_LIST" ]
-#  then local __rpm_list="$__rpm_list $RPM_LIST"
-#  fi
-
-     if [ ! -z "$TARGET_VERSION" ]
-   then getPreinstall $TARGET_VERSION
-   fi
-
-echo "************************"
-echo $RPM_LIST
+    if [ ! -z "$TARGET_HOME" ] && ! [[ $TARGET_HOME == $ORACLE_BASE/* ]]
+  then error "The target ORACLE_HOME directory $TARGET_HOME must be a subdirectory of the ORACLE_BASE."
+  elif [ ! -z "$TARGET_HOME" ]
+  then getPreinstall $TARGET_VERSION
+  fi
 
   yum -y update
   yum -y install openssl $RPM_LIST
@@ -114,10 +111,10 @@ echo $RPM_LIST
   then yum -y install $RPM_SUPPLEMENT
   fi
 
-  mkdir -p {$ORACLE_INV,$ORACLE_HOME,$ORADATA/dbconfig,$ORACLE_BASE/{admin,scripts/{setup,startup}}} || error "Failure creating directories.\n"
-  chown -R oracle:oinstall $SCRIPTS_DIR $ORACLE_INV $ORACLE_BASE $ORADATA                            || error "Failure changing directory ownership."
-  ln -s $ORACLE_BASE/scripts /docker-entrypoint-initdb.d                                             || error "Failure setting Docker entrypoint."
-  echo oracle:oracle | chpasswd                                                                      || error "Failure setting the oracle user password."
+  mkdir -p {$ORACLE_INV,$ORACLE_HOME,$__target_home,$ORADATA/dbconfig,$ORACLE_BASE/{admin,scripts/{setup,startup}}} || error "Failure creating directories."
+  chown -R oracle:oinstall $SCRIPTS_DIR $ORACLE_INV $ORACLE_BASE $ORADATA $__target_home                            || error "Failure changing directory ownership."
+  ln -s $ORACLE_BASE/scripts /docker-entrypoint-initdb.d                                                            || error "Failure setting Docker entrypoint."
+  echo oracle:oracle | chpasswd                                                                                     || error "Failure setting the oracle user password."
   yum clean all
 }
 
@@ -244,8 +241,6 @@ installOracle() {
          1) checkSum $INSTALL_DIR/Checksum zip ;;
          *) checkSum $INSTALL_DIR/Checksum.${ORACLE_EDITION} zip ;;
        esac
-
-#       chown -R oracle:oinstall $INSTALL_DIR/*
 
        # Unset errors to prevent installer warnings from exiting
        set +e
@@ -414,7 +409,6 @@ runDBCA() {
               if [ "$PDB_NUM" -eq 1 ]
             then # Create the database and the first PDB
                  logger "\n${FUNCNAME[0]}: Creating container database $ORACLE_SID and pluggable database $PDB_NAME \n"
-#                 cp $__dbcatemplate $__dbcaresponse
                  createDatabase $__dbcaresponse TRUE 1 $PDB_NAME $PDB_ADMIN
                  PDBENV="export ORACLE_PDB=$PDB_NAME"
             else # Create additional PDB
@@ -429,7 +423,6 @@ runDBCA() {
   elif [ "$__version" != "11" ] && [ "$PDB_COUNT" -gt 0 ]
   then PDB_ADMIN=PDBADMIN
        logger "\n${FUNCNAME[0]}: Creating container database $ORACLE_SID and $PDB_COUNT pluggable database(s) with name $ORACLE_PDB \n"
-#       cp $__dbcatemplate $__dbcaresponse
        createDatabase $__dbcaresponse TRUE $PDB_COUNT $ORACLE_PDB $PDB_ADMIN
          if [ "$PDB_COUNT" -eq 1 ]
        then PDBENV="export ORACLE_PDB=$ORACLE_PDB"
@@ -441,7 +434,6 @@ runDBCA() {
        fi
        alterPluggableDB
   else logger "\n${FUNCNAME[0]}: Creating database $ORACLE_SID \n"
-#       cp $SCRIPTS_DIR/dbca.rsp $ORACLE_BASE/dbca.$ORACLE_SID.rsp
        createDatabase $__dbcaresponse FALSE
        PDBENV="unset ORACLE_PDB"
   fi
@@ -644,13 +636,6 @@ while getopts ":ehuOPRU" opt; do
               fi ;;
            e) # Configure environment
               configENV
-              exit 0 ;;
-           u) # Configure upgrade environment
-                if [[ $TARGET_HOME == $ORACLE_BASE/* ]] 
-              then mkdir -p $TARGET_HOME || error "Failure creating target directory.\n"
-              else error "The target ORACLE_HOME directory $TARGET_HOME must be a subdirectory of the ORACLE_BASE."
-              fi
-              configENV $TARGET_VERSION
               exit 0 ;;
            O) # Install Oracle
               installOracle $ORACLE_VERSION $ORACLE_HOME
