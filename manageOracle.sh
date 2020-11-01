@@ -626,7 +626,7 @@ ORACLE_CHARACTERSET=${ORACLE_CHARACTERSET:-AL32UTF8}
 ORACLE_NLS_CHARACTERSET=${ORACLE_NLS_CHARACTERSET:-AL16UTF16}
 
 # If a parameter is passed to the script, run the associated action.
-while getopts ":ehuOPRU" opt; do
+while getopts ":ehOPRU" opt; do
       case ${opt} in
            h) # Check health of the database
               HealthCheck

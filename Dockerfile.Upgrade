@@ -88,7 +88,7 @@ COPY $MANAGE_ORACLE $ORACLE_VERSION/install/dbca* $SCRIPTS_DIR/
 
 # Build base image:
 RUN chmod ug+x $SCRIPTS_DIR/*.sh && \
-    $SCRIPTS_DIR/$MANAGE_ORACLE -u && \
+    $SCRIPTS_DIR/$MANAGE_ORACLE -e && \
     rm -fr /tmp/* /var/cache/yum
 
 #----------------------------------------------------------#
