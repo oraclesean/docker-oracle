@@ -1,8 +1,8 @@
 responseFileVersion=/oracle/assistants/rspfmt_dbca_response_schema_v19.0.0
 gdbName=###ORACLE_SID###
 sid=###ORACLE_SID###
-createAsContainerDatabase=true
-numberOfPDBs=1
+createAsContainerDatabase=###CREATE_CONTAINER###
+numberOfPDBs=###PDBS###
 pdbName=###PDB_NAME###
 pdbAdminPassword=###ORACLE_PWD###
 templateName=General_Purpose.dbc
