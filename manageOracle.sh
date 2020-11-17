@@ -744,12 +744,12 @@ export ORACLE_SID=${ORACLE_SID}
 $PDBENV
 EOF
 
-       if [ "$(rlwrap -v > /dev/null 2>&1)" ]
+       if [ "$(rlwrap -v)" ]
      then cat << EOF >> "$HOME"/.bashrc
 alias sqlplus="rlwrap \$ORACLE_HOME/bin/sqlplus"
 alias rman="rlwrap \$ORACLE_HOME/bin/rman"
 EOF
-     fi
+     fi > /dev/null 2>&1
 
      # Create login.sql
        if [ -n "$SQLPATH" ]
