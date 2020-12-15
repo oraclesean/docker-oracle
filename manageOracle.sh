@@ -80,6 +80,7 @@ getPreinstall() {
        12.2*)  pre="oracle-database-server-12cR2-preinstall" ;;
        18.*)   pre="oracle-database-preinstall-18c" ;;
        19.*)   pre="oracle-database-preinstall-19c" ;;
+       *)      pre="oracle-database-preinstall-19c" ;;
   esac
 
   export RPM_LIST="openssl $pre $RPM_LIST" 
@@ -128,8 +129,8 @@ checkSum() {
        then error "Checksum for $filename did not match"
        else # Unzip to the correct directory--ORACLE_HOME for 18c/19c, INSTALL_DIR for others
             case $ORACLE_VERSION in
-                 18.*|19.*) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/$filename" ;;
-                         *) sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/$filename" ;;
+                 18.*|19.*|21.*) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/$filename" ;;
+                              *) sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/$filename" ;;
             esac
        fi
   done
@@ -247,8 +248,8 @@ installOracle() {
        set +e
        # Match the install command to the version
        case $__version in       
-            18.*|19.*) sudo su - oracle -c "$__oracle_home/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignorePrereqFailure" ;;
-                    *) sudo su - oracle -c "$INSTALL_DIR/database/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignoresysprereqs -ignoreprereq" ;;
+            18.*|19.*|21.*) sudo su - oracle -c "$__oracle_home/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignorePrereqFailure" ;;
+                         *) sudo su - oracle -c "$INSTALL_DIR/database/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignoresysprereqs -ignoreprereq" ;;
        esac
        set -e
 
@@ -692,7 +693,7 @@ then mkdir -p "$ORACLE_BASE"/admin/"$ORACLE_SID"/adump
 fi
 
 # Check whether database already exists
-  if [ "$(grep -Ec "^$ORACLE_SID\:" /etc/oratab)" -eq 1 ] && [ -d "$ORADATA"/"${ORACLE_SID^^}" ]
+  if [ "$(grep -Ec "^$ORACLE_SID\:" /etc/oratab)" -eq 1 ] && [ -d "$ORADATA"/"${ORACLE_SID^^}" ] || [ -d "$ORADATA"/"${ORACLE_SID}" ]
 then moveFiles
      startDB 
 else # Create the TNS configuration
@@ -723,7 +724,7 @@ EOF
      runDBCA
 
      # Run post-database creation alterations
-     runsql "alter system set control_files='$ORADATA/${ORACLE_SID^^}/control01.ctl' scope=spfile;"
+#     runsql "alter system set control_files='$ORADATA/${ORACLE_SID^^}/control01.ctl' scope=spfile;"
 
      moveFiles
 
