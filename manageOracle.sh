@@ -293,7 +293,7 @@ installOracle() {
   then
         for patchdir in $(find "$INSTALL_DIR"/patches/* -type d -regex '.*\/[:digit:].+$' | sed "s|/$||" | sort -n) # | grep -E "[0-9]{3}/" | sed "s|/$||" | sort -n)
          do cd "$patchdir"
-              if [ "$(find . -type f -name "./*.zip")" ]
+              if [ "$(find . -type f -name "*.zip")" ]
             then unzip -q ./*.zip
                  chown -R oracle:oinstall .
                  cd ./*/
