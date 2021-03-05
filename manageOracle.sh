@@ -548,7 +548,21 @@ HealthCheck() {
   health=$("$ORACLE_HOME"/bin/sqlplus -S / as sysdba << EOF
 set head off pages 0 trimspool on feed off serverout on
 whenever sqlerror exit warning
-select count(*) from $__tabname where open_mode=$__open_mode;
+--select count(*) from $__tabname where open_mode=$__open_mode;
+  select case
+         when database_role     = 'PRIMARY'
+          and open_mode         = 'READ WRITE'
+         then 1
+         when database_role  like '%STANDBY'
+          and (open_mode     like 'READ ONLY%'
+           or  open_mode        = 'MOUNTED')
+         then 1
+         when database_role     = 'FAR SYNC'
+          and open_mode         = 'MOUNTED'
+         then 1
+         else 0
+          end
+    from $__tabname;
 EOF
 )
 
