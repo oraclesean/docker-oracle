@@ -285,7 +285,7 @@ installOracle() {
 
   # Check for OPatch
     if [ "$(find "$INSTALL_DIR" -type f -name "p6880880*.zip" 2>/dev/null)" ]
-  then sudo su - oracle -c "unzip -oq -d $__oracle_home $INSTALL_DIR/p6880880*.zip"
+  then sudo su - oracle -c "unzip -oq -d $__oracle_home $INSTALL_DIR/p6880880*.zip" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)"
   fi
 
   # Check for patches
