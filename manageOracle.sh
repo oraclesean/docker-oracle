@@ -206,7 +206,7 @@ installOracle() {
             fi
 
             # Move directories to new locations
-              if ! [[ $OLD_INV  -ef $ORACLE_INV ]]
+              if ! [[ $OLD_INV -ef $ORACLE_INV ]]
             then mv "$OLD_INV"/* "$ORACLE_INV"/
                  find / -name oraInst.loc -exec sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" {} \;
 #                  for inv in $(find / -name oraInst.loc)
@@ -389,7 +389,21 @@ runDBCA() {
   "$ORACLE_HOME"/bin/lsnrctl start
   unset __pdb_only
 
-  logger "\n${FUNCNAME[0]}: Running DBCA for database $ORACLE_SID"
+  # Default init parameters
+  local INIT_PARAMS=${INIT_PARAMS:-db_recovery_file_dest=${ORADATA}/fast_recovery_area,audit_trail=none,audit_sys_operations=false}
+    if ! [[ $INIT_PARAMS =~ = ]]
+  then error "Invalid value provided for INIT_PARAMS: $INIT_PARAMS"
+  fi
+
+  # Allow DB unique names:
+    if [ -n "$DB_UNQNAME" ] && [ "$DB_UNQNAME" != "$ORACLE_SID" ]
+  then __db_msg="$ORACLE_SID with unique name $DB_UNQNAME"
+       INIT_PARAMS="${INIT_PARAMS},db_unique_name=$DB_UNQNAME"
+  else DB_UNQNAME=$ORACLE_SID
+       __db_msg="$ORACLE_SID"
+  fi
+
+  logger "\n${FUNCNAME[0]}: Running DBCA for database $__db_msg"
 
   cp "$SCRIPTS_DIR"/dbca.rsp "$__dbcaresponse"
 
@@ -402,12 +416,12 @@ runDBCA() {
          do
               if [ "$PDB_NUM" -eq 1 ]
             then # Create the database and the first PDB
-                 logger "\n${FUNCNAME[0]}: Creating container database $ORACLE_SID and pluggable database $PDB_NAME \n"
-                 createDatabase "$__dbcaresponse" TRUE 1 "$PDB_NAME" "$PDB_ADMIN"
+                 logger "\n${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $PDB_NAME \n"
+                 createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE 1 "$PDB_NAME" "$PDB_ADMIN"
                  PDBENV="export ORACLE_PDB=$PDB_NAME"
             else # Create additional PDB
                  logger "\n${FUNCNAME[0]}: Creating pluggable database $PDB_NAME \n"
-                 createDatabase NONE TRUE 1 "$PDB_NAME" "$PDB_ADMIN"
+                 createDatabase NONE NONE TRUE 1 "$PDB_NAME" "$PDB_ADMIN"
             fi
             addTNSEntry "$PDB_NAME"
             PDB_NUM=$((PDB_NUM+1))
@@ -416,8 +430,8 @@ runDBCA() {
        alterPluggableDB
   elif [ "$__version" != "11" ] && [ "$PDB_COUNT" -gt 0 ]
   then PDB_ADMIN=PDBADMIN
-       logger "\n${FUNCNAME[0]}: Creating container database $ORACLE_SID and $PDB_COUNT pluggable database(s) with name $ORACLE_PDB \n"
-       createDatabase "$__dbcaresponse" TRUE "$PDB_COUNT" "$ORACLE_PDB" "$PDB_ADMIN"
+       logger "\n${FUNCNAME[0]}: Creating container database $__db_msg and $PDB_COUNT pluggable database(s) with name $ORACLE_PDB \n"
+       createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE "$PDB_COUNT" "$ORACLE_PDB" "$PDB_ADMIN"
          if [ "$PDB_COUNT" -eq 1 ]
        then PDBENV="export ORACLE_PDB=$ORACLE_PDB"
             addTNSEntry "$ORACLE_PDB"
@@ -427,8 +441,8 @@ runDBCA() {
             done
        fi
        alterPluggableDB
-  else logger "\n${FUNCNAME[0]}: Creating database $ORACLE_SID \n"
-       createDatabase "$__dbcaresponse" FALSE
+  else logger "\n${FUNCNAME[0]}: Creating database $__db_msg \n"
+       createDatabase "$__dbcaresponse" "$INIT_PARAMS" FALSE
        PDBENV="unset ORACLE_PDB"
   fi
   logger "\n${FUNCNAME[0]}: DBCA complete\n"
@@ -436,10 +450,11 @@ runDBCA() {
 
 createDatabase() {
   local RESPONSEFILE=$1
-  local CREATE_CONTAINER=${2:-TRUE}
-  local PDBS=${3:-1}
-  local PDB_NAME=${4:-ORCLPDB}
-  local PDB_ADMIN=${5:-PDBADMIN}
+  local INIT_PARAMS=$2
+  local CREATE_CONTAINER=${3:-TRUE}
+  local PDBS=${4:-1}
+  local PDB_NAME=${5:-ORCLPDB}
+  local PDB_ADMIN=${6:-PDBADMIN}
   local dbcaLogDir=$ORACLE_BASE/cfgtoollogs/dbca
 
     if [ "$RESPONSEFILE" != "NONE" ]
@@ -452,7 +467,8 @@ createDatabase() {
                    CREATE_CONTAINER \
                    PDBS \
                    PDB_NAME \
-                   PDB_ADMIN
+                   PDB_ADMIN \
+                   INIT_PARAMS
          do sed -i -e "s|###${var}###|$(eval echo \$$(echo $var))|g" "$RESPONSEFILE"
        done
 
