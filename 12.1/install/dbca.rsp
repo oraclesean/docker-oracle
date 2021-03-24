@@ -16,6 +16,6 @@ EMEXPRESSPORT = "5500"
 DBSNMPPASSWORD = "###ORACLE_PWD###"
 CHARACTERSET = "###ORACLE_CHARACTERSET###"
 NATIONALCHARACTERSET= "###ORACLE_NLS_CHARACTERSET###"
-INITPARAMS = db_recovery_file_dest=/opt/oracle/oradata/fast_recovery_area,audit_trail=none,audit_sys_operations=false
+INITPARAMS = "###INIT_PARAMS###"
 AUTOMATICMEMORYMANAGEMENT = "FALSE"
 TOTALMEMORY = "2048"

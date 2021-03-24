@@ -50,7 +50,7 @@ walletPassword=
 listeners=
 variablesFile=
 variables=
-initParams=db_recovery_file_dest=/opt/oracle/oradata/fast_recovery_area,audit_trail=none,audit_sys_operations=false
+initParams=###INIT_PARAMS###
 sampleSchema=FALSE
 memoryPercentage=
 databaseType=

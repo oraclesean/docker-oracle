@@ -13,6 +13,6 @@ emExpressPort=5500
 dbsnmpPassword=###ORACLE_PWD###
 characterSet=###ORACLE_CHARACTERSET###
 nationalCharacterSet=###ORACLE_NLS_CHARACTERSET###
-initParams=audit_trail=none,audit_sys_operations=false
+initParams=###INIT_PARAMS###
 automaticMemoryManagement=FALSE
 totalMemory=2048
