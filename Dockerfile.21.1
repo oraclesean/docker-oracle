@@ -10,13 +10,13 @@ FROM oraclelinux:7-slim as base
 
 # Database defaults
 ARG ORACLE_BASE=/u01/app/oracle
-ARG ORACLE_HOME=/u01/app/oracle/product/21.0.0/dbhome_1
+ARG ORACLE_HOME=/u01/app/oracle/product/21c/dbhome_1
 ARG ORACLE_INV=/u01/app/oraInventory
 ARG ORADATA=$ORACLE_BASE/oradata
 ARG ORACLE_VERSION=21.1
 ARG ORACLE_EDITION=EE
-ARG ORACLE_SID=DB211
-ARG ORACLE_PDB=DB211_PDB1
+ARG ORACLE_SID=ORCLCDB
+ARG ORACLE_PDB=ORCLPDB
 ARG PDB_COUNT=1
 
 # Directory defaults

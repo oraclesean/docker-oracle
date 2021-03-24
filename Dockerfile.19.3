@@ -9,9 +9,9 @@ FROM oraclelinux:7-slim as base
 # Use ARGs to keep the environment clean
 
 # Database defaults
-ARG ORACLE_BASE=/opt/oracle
-ARG ORACLE_HOME=/opt/oracle/product/19c/dbhome_1
-ARG ORACLE_INV=/opt/oraInventory
+ARG ORACLE_BASE=/u01/app/oracle
+ARG ORACLE_HOME=/u01/app/oracle/product/19c/dbhome_1
+ARG ORACLE_INV=/u01/app/oraInventory
 ARG ORADATA=$ORACLE_BASE/oradata
 ARG ORACLE_VERSION=19.3
 ARG ORACLE_EDITION=EE
