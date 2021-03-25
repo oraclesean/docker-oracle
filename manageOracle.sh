@@ -240,8 +240,7 @@ installOracle() {
             fi
 
               if ! [[ $OLD_BASE -ef $ORACLE_BASE ]]
-            then #mv "$OLD_BASE"/* "$ORACLE_BASE"/
-                 rsync -a "$OLD_BASE"/ "$ORACLE_BASE" || error "Failed to move ORACLE_BASE from $OLD_BASE to $ORACLE_BASE"
+            then rsync -a "$OLD_BASE"/ "$ORACLE_BASE" || error "Failed to move ORACLE_BASE from $OLD_BASE to $ORACLE_BASE"
                  rm -rf $OLD_BASE || error "Failed to remove $OLD_BASE after moving to $ORACLE_BASE"
             fi
 
@@ -772,9 +771,6 @@ EOF
      fi
 
      runDBCA
-
-     # Run post-database creation alterations
-#     runsql "alter system set control_files='$ORADATA/${ORACLE_SID^^}/control01.ctl' scope=spfile;"
 
      moveFiles
 
