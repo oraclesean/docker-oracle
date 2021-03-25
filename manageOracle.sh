@@ -19,7 +19,25 @@ ORACLE_CHARACTERSET=${ORACLE_CHARACTERSET:-AL32UTF8}
 ORACLE_NLS_CHARACTERSET=${ORACLE_NLS_CHARACTERSET:-AL16UTF16}
 
 logger() {
+  local __format="$1"
+  shift 1
+
+  __line="#----------------------------------------------------------#"
+
+    if [[ $__format =~ B ]]
+  then printf "\n${__line}\n"
+  elif [[ $__format =~ b ]]
+  then printf "\n"
+  fi
+
   printf "%s\n" "$@"
+
+    if [[ $__format =~ A ]]
+  then printf "${__line}\n\n"
+  elif [[ $__format =~ a ]]
+  then printf "\n"
+  fi
+
 }
 
 warn() {
@@ -50,17 +68,17 @@ FIXCASE() {
 }
 
 _sigint() {
-  logger "\n${FUNCNAME[0]}: SIGINT recieved: stopping database"
+  logger BA "${FUNCNAME[0]}: SIGINT recieved: stopping database"
   stopDB
 }
 
 _sigterm() {
-  logger "\n${FUNCNAME[0]}: SIGTERM received: stopping database"
+  logger BA "${FUNCNAME[0]}: SIGTERM received: stopping database"
   stopDB
 }
 
 _sigkill() {
-  logger "\n${FUNCNAME[0]}: SIGKILL received: Stopping database"
+  logger BA "${FUNCNAME[0]}: SIGKILL received: Stopping database"
   stopDB
 }
 
@@ -93,7 +111,7 @@ configENV() {
   local __target_home=${TARGET_HOME:-$ORACLE_HOME}
 
     if [ ! "$(df -PB 1G / | tail -n 1 | awk '{print $4}')" -ge "$__min_space_gb" ]
-  then error "The build requires at least $__min_space_gb GB free space.\n"
+  then error "The build requires at least $__min_space_gb GB free space."
   fi
 
   getPreinstall "$ORACLE_VERSION"
@@ -207,7 +225,7 @@ installOracle() {
 
             # Move directories to new locations
               if ! [[ $OLD_INV -ef $ORACLE_INV ]]
-            then mv "$OLD_INV"/* "$ORACLE_INV"/
+            then mv "$OLD_INV"/* "$ORACLE_INV"/ || error "Failed to move Oracle Inventory from $OLD_INV to $ORACLE_INV"
                  find / -name oraInst.loc -exec sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" {} \;
 #                  for inv in $(find / -name oraInst.loc)
 #                   do sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" "$inv"
@@ -215,14 +233,16 @@ installOracle() {
             fi
 
               if ! [[ $OLD_HOME -ef $__oracle_home ]]
-            then mv "$OLD_HOME"/* "$__oracle_home"/
+            then mv "$OLD_HOME"/* "$__oracle_home"/ || error "Failed to move ORACLE_HOME from $OLD_HOME to $__oracle_home"
                  chown -R oracle:oinstall "$__oracle_home"
-                 rm -fr "$OLD_BASE"/product
-                 sudo su - oracle -c "$__oracle_home/perl/bin/perl $__oracle_home/clone/bin/clone.pl ORACLE_HOME=$__oracle_home ORACLE_BASE=$ORACLE_BASE -defaultHomeName -invPtrLoc $__oracle_home/oraInst.loc"
+                 rm -fr "$OLD_BASE"/product || error "Failed to remove $OLD_HOME after moving to $__oracle_home"
+                 sudo su - oracle -c "$__oracle_home/perl/bin/perl $__oracle_home/clone/bin/clone.pl ORACLE_HOME=$__oracle_home ORACLE_BASE=$ORACLE_BASE -defaultHomeName -invPtrLoc $__oracle_home/oraInst.loc" || error "ORACLE_HOME cloning failed for $__oracle_home"
             fi
 
               if ! [[ $OLD_BASE -ef $ORACLE_BASE ]]
-            then mv "$OLD_BASE"/* "$ORACLE_BASE"/
+            then #mv "$OLD_BASE"/* "$ORACLE_BASE"/
+                 rsync -a "$OLD_BASE"/ "$ORACLE_BASE" || error "Failed to move ORACLE_BASE from $OLD_BASE to $ORACLE_BASE"
+                 rm -rf $OLD_BASE || error "Failed to remove $OLD_BASE after moving to $ORACLE_BASE"
             fi
 
 #            sed -i -e "s|^export ORACLE_HOME=.*$|export ORACLE_HOME=$__oracle_home|g" \
@@ -390,7 +410,7 @@ runDBCA() {
   unset __pdb_only
 
   # Default init parameters
-  local INIT_PARAMS=${INIT_PARAMS:-db_recovery_file_dest=${ORADATA}/fast_recovery_area,audit_trail=none,audit_sys_operations=false}
+  local INIT_PARAMS=${INIT_PARAMS:-db_create_file_dest=${ORADATA},db_create_online_log_dest_1=${ORADATA},db_recovery_file_dest=${ORADATA}/fast_recovery_area,audit_trail=none,audit_sys_operations=false}
     if ! [[ $INIT_PARAMS =~ = ]]
   then error "Invalid value provided for INIT_PARAMS: $INIT_PARAMS"
   fi
@@ -403,7 +423,7 @@ runDBCA() {
        __db_msg="$ORACLE_SID"
   fi
 
-  logger "\n${FUNCNAME[0]}: Running DBCA for database $__db_msg"
+  logger B "${FUNCNAME[0]}: Running DBCA for database $__db_msg"
 
   cp "$SCRIPTS_DIR"/dbca.rsp "$__dbcaresponse"
 
@@ -416,11 +436,11 @@ runDBCA() {
          do
               if [ "$PDB_NUM" -eq 1 ]
             then # Create the database and the first PDB
-                 logger "\n${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $PDB_NAME \n"
+                 logger A "${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $PDB_NAME"
                  createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE 1 "$PDB_NAME" "$PDB_ADMIN"
                  PDBENV="export ORACLE_PDB=$PDB_NAME"
             else # Create additional PDB
-                 logger "\n${FUNCNAME[0]}: Creating pluggable database $PDB_NAME \n"
+                 logger A "${FUNCNAME[0]}: Creating pluggable database $PDB_NAME"
                  createDatabase NONE NONE TRUE 1 "$PDB_NAME" "$PDB_ADMIN"
             fi
             addTNSEntry "$PDB_NAME"
@@ -430,7 +450,7 @@ runDBCA() {
        alterPluggableDB
   elif [ "$__version" != "11" ] && [ "$PDB_COUNT" -gt 0 ]
   then PDB_ADMIN=PDBADMIN
-       logger "\n${FUNCNAME[0]}: Creating container database $__db_msg and $PDB_COUNT pluggable database(s) with name $ORACLE_PDB \n"
+       logger A "${FUNCNAME[0]}: Creating container database $__db_msg and $PDB_COUNT pluggable database(s) with name $ORACLE_PDB"
        createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE "$PDB_COUNT" "$ORACLE_PDB" "$PDB_ADMIN"
          if [ "$PDB_COUNT" -eq 1 ]
        then PDBENV="export ORACLE_PDB=$ORACLE_PDB"
@@ -441,11 +461,11 @@ runDBCA() {
             done
        fi
        alterPluggableDB
-  else logger "\n${FUNCNAME[0]}: Creating database $__db_msg \n"
+  else logger A "${FUNCNAME[0]}: Creating database $__db_msg"
        createDatabase "$__dbcaresponse" "$INIT_PARAMS" FALSE
        PDBENV="unset ORACLE_PDB"
   fi
-  logger "\n${FUNCNAME[0]}: DBCA complete\n"
+  logger BA "${FUNCNAME[0]}: DBCA complete"
 }
 
 createDatabase() {
@@ -480,8 +500,8 @@ createDatabase() {
          if [ "$(nproc)" -gt 8 ]
        then sed -i -e 's|TOTALMEMORY = "2048"||g' "$RESPONSEFILE"
        fi
-       "$ORACLE_HOME"/bin/dbca -silent -createDatabase -responseFile "$RESPONSEFILE" || cat "$dbcaLogDir"/"$ORACLE_SID"/"$ORACLE_SID".log || cat "$dbcaLogDir"/"$ORACLE_SID".log || cat "$dbcaLogDir"/"$ORACLE_SID"/"$PDB_NAME"/"$ORACLE_SID".log
-  else "$ORACLE_HOME"/bin/dbca -silent -createPluggableDatabase -pdbName "$PDB_NAME" -sourceDB "$ORACLE_SID" -createAsClone true -createPDBFrom DEFAULT -pdbAdminUserName "$PDB_ADMIN" -pdbAdminPassword "$ORACLE_PWD" || cat "$dbcaLogDir"/"$ORACLE_SID"/"$ORACLE_SID".log || cat "$dbcaLogDir"/"$ORACLE_SID".log || cat "$dbcaLogDir"/"$ORACLE_SID"/"$PDB_NAME"/"$ORACLE_SID".log
+       "$ORACLE_HOME"/bin/dbca -silent -createDatabase -responseFile "$RESPONSEFILE" || cat "$dbcaLogDir"/"$DB_UNQNAME"/"$DB_UNQNAME".log || cat "$dbcaLogDir"/"$DB_UNQNAME".log || cat "$dbcaLogDir"/"$DB_UNQNAME"/"$PDB_NAME"/"$DB_UNQNAME".log
+  else "$ORACLE_HOME"/bin/dbca -silent -createPluggableDatabase -pdbName "$PDB_NAME" -sourceDB "$ORACLE_SID" -createAsClone true -createPDBFrom DEFAULT -pdbAdminUserName "$PDB_ADMIN" -pdbAdminPassword "$ORACLE_PWD" || cat "$dbcaLogDir"/"$DB_UNQNAME"/"$DB_UNQNAME".log || cat "$dbcaLogDir"/"$DB_UNQNAME".log || cat "$dbcaLogDir"/"$DB_UNQNAME"/"$PDB_NAME"/"$DB_UNQNAME".log
   fi
 
 }
@@ -622,17 +642,17 @@ runUserScripts() {
        exit 1
   elif [ -d "$SCRIPTS_ROOT" ] && [ -n "$(ls -A "$SCRIPTS_ROOT")" ]
   then # Check that directory exists and it contains files
-       logger "\n${FUNCNAME[0]}: Running user scripts\n"
+       logger B "${FUNCNAME[0]}: Running user scripts"
         for f in "$SCRIPTS_ROOT"/*
          do
             case "$f" in
-                 *.sh)     logger "\n${FUNCNAME[0]}: Script: $f \n"; . "$f" ;;
-                 *.sql)    logger "\n${FUNCNAME[0]}: Script: $f \n"; echo "exit" | "$ORACLE_HOME"/bin/sqlplus -s "/ as sysdba" @"$f" ;;
-                 *)        logger "\n${FUNCNAME[0]}: Ignored file $f \n" ;;
+                 *.sh)     logger ba "${FUNCNAME[0]}: Script: $f"; . "$f" ;;
+                 *.sql)    logger ba "${FUNCNAME[0]}: Script: $f"; echo "exit" | "$ORACLE_HOME"/bin/sqlplus -s "/ as sysdba" @"$f" ;;
+                 *)        logger ba "${FUNCNAME[0]}: Ignored file $f" ;;
             esac
        done
 
-       logger "\n${FUNCNAME[0]}: User scripts complete\n"
+       logger A "${FUNCNAME[0]}: User scripts complete"
   fi
 }
 
@@ -748,7 +768,7 @@ EOF
      # Create a database password if none exists
        if [ -z "$ORACLE_PWD" ]
      then ORACLE_PWD=$(openssl rand -base64 8)1; export ORACLE_PWD
-          logger "\n${FUNCNAME[0]}: ORACLE PASSWORD FOR SYS, SYSTEM AND PDBADMIN: $ORACLE_PWD"
+          logger BA "${FUNCNAME[0]}: ORACLE PASSWORD FOR SYS, SYSTEM AND PDBADMIN: $ORACLE_PWD"
      fi
 
      runDBCA
@@ -794,17 +814,13 @@ fi
   if HealthCheck
 #  if [ "$?" -eq 0 ]
 then runUserScripts "$ORACLE_BASE"/scripts/setup
-     logger "\n#----------------------------------------------------------#\n"
-     logger "  Database $ORACLE_SID is open and available."
-     logger "\n#----------------------------------------------------------#\n"
-else logger "\n#----------------------------------------------------------#\n"
-     warn "  Database setup for $ORACLE_SID was unsuccessful."
+     logger BA "  Database $ORACLE_SID is open and available."
+else warn "  Database setup for $ORACLE_SID was unsuccessful."
      warn "  Check log output for additional information."
-     logger "\n#----------------------------------------------------------#\n"
 fi
 
 # Tail on alert log and wait (otherwise container will exit)
-logger "Tailing alert_${ORACLE_SID}.log:"
+logger B "Tailing alert_${ORACLE_SID}.log:"
 tail -f "$ORACLE_BASE"/diag/rdbms/*/*/trace/alert*.log &
 childPID=$!
 wait $childPID
