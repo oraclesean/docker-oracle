@@ -227,6 +227,7 @@ installOracle() {
               if ! [[ $OLD_INV -ef $ORACLE_INV ]]
             then mv "$OLD_INV"/* "$ORACLE_INV"/ || error "Failed to move Oracle Inventory from $OLD_INV to $ORACLE_INV"
                  find / -name oraInst.loc -exec sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" {} \;
+                 rm -fr $OLD_INV || error "Failed to remove Oracle Inventory from $OLD_INV"
 #                  for inv in $(find / -name oraInst.loc)
 #                   do sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" "$inv"
 #                 done
