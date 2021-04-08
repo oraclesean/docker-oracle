@@ -22,7 +22,7 @@ logger() {
   local __format="$1"
   shift 1
 
-  __line="#----------------------------------------------------------#"
+  __line="# --------------------------------------------------------------------------- #"
 
     if [[ $__format =~ B ]]
   then printf "\n${__line}\n"
@@ -130,7 +130,7 @@ configENV() {
   then yum -y install $RPM_SUPPLEMENT
   fi
 
-  mkdir -p {"$ORACLE_INV","$ORACLE_HOME","$__target_home","$ORADATA"/dbconfig,"$ORACLE_BASE"/{admin,scripts/{setup,startup}}} || error "Failure creating directories."
+  mkdir -p {"$ORACLE_INV","$ORACLE_HOME","$__target_home","$ORADATA"/{dbconfig,fast_recovery_area},"$ORACLE_BASE"/{admin,scripts/{setup,startup}}} || error "Failure creating directories."
   chown -R oracle:oinstall "$SCRIPTS_DIR" "$ORACLE_INV" "$ORACLE_BASE" "$ORADATA" "$__target_home"                            || error "Failure changing directory ownership."
   ln -s "$ORACLE_BASE"/scripts /docker-entrypoint-initdb.d                                                                    || error "Failure setting Docker entrypoint."
   echo oracle:oracle | chpasswd                                                                                               || error "Failure setting the oracle user password."
@@ -431,19 +431,21 @@ runDBCA() {
        IFS=,
        PDB_NUM=1
        PDB_ADMIN=PDBADMIN
-        for PDB_NAME in $PDB_LIST
+        for ORACLE_PDB in $PDB_LIST
          do
+            IFS=$OLDIFS
               if [ "$PDB_NUM" -eq 1 ]
             then # Create the database and the first PDB
-                 logger A "${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $PDB_NAME"
-                 createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE 1 "$PDB_NAME" "$PDB_ADMIN"
-                 PDBENV="export ORACLE_PDB=$PDB_NAME"
+                 logger A "${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $ORACLE_PDB"
+                 createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
+                 PDBENV="export ORACLE_PDB=$ORACLE_PDB"
             else # Create additional PDB
-                 logger A "${FUNCNAME[0]}: Creating pluggable database $PDB_NAME"
-                 createDatabase NONE NONE TRUE 1 "$PDB_NAME" "$PDB_ADMIN"
+                 logger A "${FUNCNAME[0]}: Creating pluggable database $ORACLE_PDB"
+                 createDatabase NONE NONE TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
             fi
-            addTNSEntry "$PDB_NAME"
+            addTNSEntry "$ORACLE_PDB"
             PDB_NUM=$((PDB_NUM+1))
+            IFS=,
        done
        IFS=$OLDIFS
        alterPluggableDB
@@ -484,6 +486,7 @@ createDatabase() {
                    ORACLE_CHARACTERSET \
                    ORACLE_NLS_CHARACTERSET \
                    CREATE_CONTAINER \
+                   ORADATA \
                    PDBS \
                    PDB_NAME \
                    PDB_ADMIN \
@@ -597,7 +600,8 @@ whenever sqlerror exit warning
          then 1
          else 0
           end
-    from $__tabname;
+    from v\$database;
+--    from $__tabname;
 EOF
 )
 
@@ -611,12 +615,16 @@ EOF
 
 postInstallRoot() {
   # Run root scripts in final build stage
+  logger BA "Running root scripts"
   "$ORACLE_INV"/orainstRoot.sh
   "$ORACLE_HOME"/root.sh
 
-  # If this is an upgrade image, run the target root script
+  # If this is an upgrade image, run the target root script and attach the new home.
     if [ -n "$TARGET_HOME" ] && [ -d "$TARGET_HOME" ] && [ -f "$TARGET_HOME/root.sh" ]
-  then "$TARGET_HOME"/root.sh
+  then logger BA "Running root script in $TARGET_HOME"
+       "$TARGET_HOME"/root.sh
+       logger BA "Attaching home for upgrade"
+       sudo su - oracle -c "$TARGET_HOME/oui/bin/attachHome.sh"
   fi
 
   # Additional steps to be performed as root
