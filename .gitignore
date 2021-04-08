@@ -6,3 +6,6 @@
 /docker-images
 /docker-oracle
 /upgrade/*.jar
+/farsync/srdc*
+/farsync/tnsnames.ora
+/farsync/listener.ora
