@@ -1,0 +1,72 @@
+version: '3'
+services: 
+  APPPROD:
+    image: oraclesean/db:19.9-ee
+    container_name: APPPROD
+    volumes:
+      - "FS_APPPROD:/opt/oracle/oradata"
+      - "FS_SHARE:/share"
+    environment:
+      CONTAINER_NAME: APPPROD
+      ORACLE_SID: APPPROD
+      DB_UNQNAME: APPPROD
+      ORACLE_PWD: oracle
+      PDB_COUNT: 0
+      ROLE: PRIMARY
+    ports:
+      - "10021:1521"
+
+  APPDRDB:
+    image: oraclesean/db:19.9-ee
+    container_name: APPDRDB
+    volumes:
+      - "FS_APPDRDB:/opt/oracle/oradata"
+      - "FS_SHARE:/share"
+    environment:
+      CONTAINER_NAME: APPDRDB
+      ORACLE_SID: APPPROD
+      DB_UNQNAME: APPDRDB
+      ORACLE_PWD: oracle
+      PDB_COUNT: 0
+      ROLE: STANDBY
+    ports:
+      - "10022:1521"
+
+  APPFSDB:
+    image: oraclesean/db:19.9-ee
+    container_name: APPFSDB
+    volumes:
+      - "FS_APPFSDB:/opt/oracle/oradata"
+      - "FS_SHARE:/share"
+    environment:
+      CONTAINER_NAME: APPFSDB
+      ORACLE_SID: APPPROD
+      DB_UNQNAME: APPFSDB
+      ORACLE_PWD: oracle
+      PDB_COUNT: 0
+      ROLE: FARSYNC
+    ports:
+      - "10023:1521"
+
+  APPNPDB:
+    image: oraclesean/db:19.9-ee
+    container_name: APPNPDB
+    volumes:
+      - "FS_APPNPDB:/opt/oracle/oradata"
+      - "FS_SHARE:/share"
+    environment:
+      CONTAINER_NAME: APPNPDB
+      ORACLE_SID: APPPROD
+      DB_UNQNAME: APPNPDB
+      ORACLE_PWD: oracle
+      PDB_COUNT: 0
+      ROLE: STANDBY
+    ports:
+      - "10024:1521"
+
+volumes:
+  FS_APPPROD:
+  FS_APPDRDB:
+  FS_APPFSDB:
+  FS_APPNPDB:
+  FS_SHARE:

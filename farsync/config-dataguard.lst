@@ -1,0 +1,5 @@
+# Host    | ID | IMAGE  | ORACLE_SID  | DB_UNQNAME | ORACLE_PWD | PDB_COUNT | PDB_NAME | Role    | ROUTE_PRI |
+PHOENIX   | 0  | new199 | PROD        | PHOENIX    | oracle     | 0         |          | PRIMARY | 0         |
+DALLAS    | 1  | new199 | PROD        | DALLAS     | oracle     | 0         |          | STANDBY | 8         |
+DENVER    | 2  | new199 | PROD        | DENVER     | oracle     | 0         |          | STANDBY | 8         |
+VEGAS     | 3  | new199 | PROD        | VEGAS      | oracle     | 0         |          | FARSYNC | 1         |
