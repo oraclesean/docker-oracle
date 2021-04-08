@@ -82,6 +82,16 @@ _sigkill() {
   stopDB
 }
 
+replaceVars() {
+  local __file="$1"
+  local __var="$2"
+    if [ -z "$3" ]
+  then local __val="$(eval echo \$$(echo $__var))"
+  else local __val="$3"
+  fi
+  sed -i -e "s|###${__var}###|${__val}|g" "$__file"
+}
+
 checkDirectory() {
     if [ ! -d "$1" ]
   then error "Directory $1 does not exist"
@@ -180,10 +190,17 @@ installOracle() {
   then error "The ORACLE_HOME directory $__oracle_home must be a subdirectory of the ORACLE_BASE."
   fi
 
-  sed -i -e "s|###ORACLE_EDITION###|$ORACLE_EDITION|g" \
-         -e "s|###ORACLE_INV###|$ORACLE_INV|g" \
-         -e "s|###ORACLE_BASE###|$ORACLE_BASE|g" \
-         -e "s|###ORACLE_HOME###|$__oracle_home|g" "$INSTALL_DIR"/"$INSTALL_RESPONSE"
+   for var in ORACLE_EDITION \
+              ORACLE_INV \
+              ORACLE_BASE
+    do
+       replaceVars "$INSTALL_DIR"/"$INSTALL_RESPONSE" "$var"
+  done
+       replaceVars "$INSTALL_DIR"/"$INSTALL_RESPONSE" "ORACLE_HOME" "$__oracle_home"
+#  sed -i -e "s|###ORACLE_EDITION###|$ORACLE_EDITION|g" \
+#         -e "s|###ORACLE_INV###|$ORACLE_INV|g" \
+#         -e "s|###ORACLE_BASE###|$ORACLE_BASE|g" \
+#         -e "s|###ORACLE_HOME###|$__oracle_home|g" "$INSTALL_DIR"/"$INSTALL_RESPONSE"
 
   # Fix a problem that prevents root from su - oracle:
   sed -i -e "s|\(^session\s*include\s*system-auth\)|#\1|" /etc/pam.d/su
@@ -425,7 +442,8 @@ runDBCA() {
 
   logger B "${FUNCNAME[0]}: Running DBCA for database $__db_msg"
 
-  cp "$SCRIPTS_DIR"/dbca.rsp "$__dbcaresponse"
+  # Detect custom DBCA response files:
+  cp "$ORADATA"/dbca."$ORACLE_SID".rsp "$__dbcaresponse" 2>/dev/null || cp "$ORADATA"/dbca.rsp "$__dbcaresponse" 2>/dev/null || cp "$SCRIPTS_DIR"/dbca.rsp "$__dbcaresponse"
 
     if [ "$__version" != "11" ] && [ -n "$PDB_LIST" ]
   then OLDIFS=$IFS
@@ -492,7 +510,8 @@ createDatabase() {
                    PDB_NAME \
                    PDB_ADMIN \
                    INIT_PARAMS
-         do sed -i -e "s|###${var}###|$(eval echo \$$(echo $var))|g" "$RESPONSEFILE"
+         do replaceVars "$RESPONSEFILE" "$var"
+            #sed -i -e "s|###${var}###|$(eval echo \$$(echo $var))|g" "$RESPONSEFILE"
        done
 
        # If there is greater than 8 CPUs default back to dbca memory calculations
@@ -510,8 +529,8 @@ createDatabase() {
 }
 
 moveFiles() {
-    if [ ! -d "$ORACLE_BASE/oradata/dbconfig/$ORACLE_SID" ]
-  then mkdir -p "$ORACLE_BASE"/oradata/dbconfig/"$ORACLE_SID"
+    if [ ! -d "$ORADATA/dbconfig/$ORACLE_SID" ]
+  then mkdir -p "$ORADATA"/dbconfig/"$ORACLE_SID"
   fi
 
   local __dbconfig="$ORADATA"/dbconfig/"$ORACLE_SID"
