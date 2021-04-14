@@ -22,7 +22,7 @@ logger() {
   local __format="$1"
   shift 1
 
-  __line="# --------------------------------------------------------------------------- #"
+  __line="# ----------------------------------------------------------------------------------------------- #"
 
     if [[ $__format =~ B ]]
   then printf "\n${__line}\n"
@@ -30,7 +30,7 @@ logger() {
   then printf "\n"
   fi
 
-  printf "%s\n" "$@"
+  printf "%s\n" "  $@"
 
     if [[ $__format =~ A ]]
   then printf "${__line}\n\n"
@@ -838,9 +838,9 @@ fi
   if HealthCheck
 #  if [ "$?" -eq 0 ]
 then runUserScripts "$ORACLE_BASE"/scripts/setup
-     logger BA "  Database $ORACLE_SID is open and available."
-else warn "  Database setup for $ORACLE_SID was unsuccessful."
-     warn "  Check log output for additional information."
+     logger BA "Database $ORACLE_SID is open and available."
+else warn "Database setup for $ORACLE_SID was unsuccessful."
+     warn "Check log output for additional information."
 fi
 
 # Tail on alert log and wait (otherwise container will exit)
