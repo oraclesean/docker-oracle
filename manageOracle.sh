@@ -408,7 +408,12 @@ EOF
 startDB() {
     if [ -n "$ORACLE_HOME" ] && [ -n "$ORACLE_SID" ]
   then "$ORACLE_HOME"/bin/lsnrctl start
-       runsql "startup;"
+         if [ -z "$OPEN_MODE" ] || [ "$OPEN_MODE" = "OPEN" ]
+       then runsql "startup;"
+       else runsql "startup mount;"
+            if [ "$OPEN_MODE" != "MOUNT" ]; then runsql "alter database open read only;"; fi
+            if [ "$OPEN_MODE"  = "APPLY" ]; then runsql "alter database recover managed standby database disconnect from session;"; fi
+       fi
   else error "${FUNCNAME[0]} failed to start the database: ORACLE_HOME and ORACLE_SID must be set."
        return 1
   fi
@@ -417,6 +422,62 @@ startDB() {
 stopDB() {
   runsql "shutdown immediate;"
   "$ORACLE_HOME"/bin/lsnrctl stop
+}
+
+checkMode() {
+  target_status=$(echo "$1" | sed "s/ /./g")
+  check=
+  while [[ ! $check =~ $target_status ]]
+     do check=$(echo "select open_mode from v\$database;" | "$ORACLE_HOME"/bin/sqlplus -S / as sysdba) 2>/dev/null
+          if ! [[ $check =~ $target_status ]]
+        then echo "Database $DB_UNQNAME is not online; sleeping."
+             sleep 180
+        else echo "Database $DB_UNQNAME is online."
+        fi
+   done
+}
+
+setupDG() {
+  dbrole=$1 
+    if [ "$dbrole" = "PRIMARY" ]
+  then "$ORACLE_HOME"/bin/sqlplus / as sysdba @"$SETUP_DIR"/"$SETUP_PRIMARY".sql
+        for duplicate in $(find "$SETUP_DIR"/"$RMAN_DUPLICATE".*.rman)
+         do cs="$(head -1 "$duplicate" | awk '{print $NF}')"
+            "$ORACLE_HOME"/bin/rman target sys/"$ORACLE_PWD"@"$DB_UNQNAME" cmdfile "$duplicate" log /tmp/duplicate.out
+            # Open standby database read only
+              if [ "$(grep -c farsync "$duplicate")" -eq 0 ]
+            then echo "alter database open read only;" | "$ORACLE_HOME"/bin/sqlplus "$cs" as sysdba
+            fi
+       done
+       cat "$SETUP_DIR"/"$BROKER_SCRIPT" | "$ORACLE_HOME"/bin/dgmgrl /
+       sleep 60
+       cat "$SETUP_DIR"/"$BROKER_CHECKS" | "$ORACLE_HOME"/bin/dgmgrl /
+  else mkdir -p "$ORACLE_BASE"/admin/"$DB_UNQNAME"/adump
+       mkdir -p "$ORACLE_BASE"/diag/rdbms/"${DB_UNQNAME,,}"/"$ORACLE_SID"/trace
+       touch "$ORACLE_BASE"/diag/rdbms/"${DB_UNQNAME,,}"/"$ORACLE_SID"/trace/alert_"$ORACLE_SID".log
+       printf "%s:%s:N\n" "$ORACLE_SID" "$ORACLE_HOME" > /etc/oratab
+       # Create a pfile for startup of the DG replica
+       cat <<- EOF > "$ORACLE_HOME"/dbs/init"$ORACLE_SID".ora
+        *.db_name=${ORACLE_SID}
+        *.db_unique_name=${DB_UNQNAME}
+	*.pga_aggregate_target=10M
+	*.sga_target=600M
+EOF
+       # Create a password file
+       "$ORACLE_HOME"/bin/orapwd file="$ORACLE_HOME"/dbs/orapw"$ORACLE_SID" force=yes format=12 <<< $(echo "$ORACLE_PWD")
+       echo "startup nomount pfile='${ORACLE_HOME}/dbs/init${ORACLE_SID}.ora';" | "$ORACLE_HOME"/bin/sqlplus / as sysdba
+       # Start listener
+       "$ORACLE_HOME"/bin/lsnrctl start
+       # Wait for the database to come online
+         if [ "$OPEN_MODE" = "MOUNT" ]
+       then checkMode "MOUNT"
+       else checkMode "READ ONLY"
+            # Open managed for managed apply
+              if [ "$OPEN_MODE" = "APPLY" ]
+            then runsql "alter database recover managed standby database disconnect from session;"
+            fi
+       fi
+  fi
 }
 
 runDBCA() {
@@ -441,6 +502,11 @@ runDBCA() {
   fi
 
   logger B "${FUNCNAME[0]}: Running DBCA for database $__db_msg"
+
+  # Additional messages for Data Guard:
+    if [ -n "$CONTAINER_NAME" ]; then logger x "${FUNCNAME[0]}:        Container name is: $CONTAINER_NAME"; fi
+    if [ -n "$ROLE" ];           then logger x "${FUNCNAME[0]}:        Container role is: $ROLE";           fi
+    if [ -n "$DG_TARGET" ];      then logger x "${FUNCNAME[0]}:   Container DG Target is: $DG_TARGET";      fi
 
   # Detect custom DBCA response files:
   cp "$ORADATA"/dbca."$ORACLE_SID".rsp "$__dbcaresponse" 2>/dev/null || cp "$ORADATA"/dbca.rsp "$__dbcaresponse" 2>/dev/null || cp "$SCRIPTS_DIR"/dbca.rsp "$__dbcaresponse"
@@ -556,17 +622,39 @@ moveFiles() {
     if [ -f "$__dbconfig/oratab" ] && [ ! -f /etc/oratab ]
   then cp "$__dbconfig"/oratab /etc/oratab 2>/dev/null
   fi
+
+  # Find wallet subdirectories in dbconfig and relink them:
+    if [ -f "$__dbconfig/sqlnet.ora" ]
+  then
+        for dirname in $(find $__dbconfig -mindepth 1 -type d)
+         do dir=$(basename $dirname)
+            # Search the sqlnet.ora for an exactly matching subdirectory
+            location=$(grep -e "^[^#].*\/$dir\/" $__dbconfig/sqlnet.ora | sed -e "s|^[^/]*/|/|g" -e "s|[^/]*$||")
+              if [ -n "$location" ] && [ ! -d "$location" ]
+            then # Create the location if it doesn't exist
+                 mkdir -p "$location"
+            fi
+              if [ -d "$location" ] && [ -f "$dirname/*" ]
+            then # Move files from the location into the dbconfig directory
+                 mv "$location"/* "$dirname"/ 2>/dev/null
+            fi
+              if [ ! -L "$location" ]
+            then # Link files from the dbconfig directory to the location
+                 ln -s "$dirname" "$location" 2>/dev/null
+            fi
+       done
+  fi
 }
 
 addTNSEntry() {
   ALIAS=$1
   cat << EOF >> "$ORACLE_HOME"/network/admin/tnsnames.ora
-$ALIAS =
+${ALIAS} =
   (DESCRIPTION =
-    (ADDRESS = (PROTOCOL = TCP)(HOST = 0.0.0.0)(PORT = 1521))
+    (ADDRESS = (PROTOCOL = TCP)(HOST = ${CONTAINER_NAME=0.0.0.0})(PORT = 1521))
     (CONNECT_DATA =
       (SERVER = DEDICATED)
-      (SERVICE_NAME = $ALIAS)
+      (SERVICE_NAME = ${ALIAS})
     )
   )
 EOF
@@ -782,15 +870,27 @@ LISTENER =
   (DESCRIPTION_LIST = 
     (DESCRIPTION = 
       (ADDRESS = (PROTOCOL = IPC)(KEY = EXTPROC1)) 
-      (ADDRESS = (PROTOCOL = TCP)(HOST = 0.0.0.0)(PORT = 1521)) 
+      (ADDRESS = (PROTOCOL = TCP)(HOST = ${CONTAINER_NAME=0.0.0.0})(PORT = 1521)) 
     ) 
   ) 
+
+SID_LIST_LISTENER =
+  (SID_LIST =
+    (SID_DESC =
+      (GLOBAL_DBNAME = ${DB_UNQNAME-$ORACLE_SID})
+      (ORACLE_HOME = ${ORACLE_HOME})
+      (SID_NAME = ${ORACLE_SID})
+    )
+  )
 
 DEDICATED_THROUGH_BROKER_LISTENER=ON
 DIAG_ADR_ENABLED = off
 EOF
 
-     echo "$ORACLE_SID=localhost:1521/$ORACLE_SID" > "$ORACLE_HOME"/network/admin/tnsnames.ora
+       if [ -f "$SETUP_DIR"/tnsnames.ora ]
+     then cp "$SETUP_DIR"/tnsnames.ora "$ORACLE_HOME"/network/admin/tnsnames.ora
+     else echo "$ORACLE_SID=localhost:1521/$ORACLE_SID" > "$ORACLE_HOME"/network/admin/tnsnames.ora
+     fi
 
      # Create a database password if none exists
        if [ -z "$ORACLE_PWD" ]
@@ -798,31 +898,28 @@ EOF
           logger BA "${FUNCNAME[0]}: ORACLE PASSWORD FOR SYS, SYSTEM AND PDBADMIN: $ORACLE_PWD"
      fi
 
-     runDBCA
-
-     moveFiles
-
      # Create the user profile
     cat << EOF >> "$HOME"/.bashrc
 export PS1="[\u - \\\${ORACLE_SID}] \w\n# "
 
-export ORACLE_BASE=$ORACLE_BASE
-export ORACLE_HOME=$ORACLE_HOME
-export PATH=$ORACLE_HOME/bin:$ORACLE_HOME/OPatch/:/usr/sbin:$PATH 
-export CLASSPATH=$ORACLE_HOME/jlib:$ORACLE_HOME/rdbms/jlib
-export LD_LIBRARY_PATH=$ORACLE_HOME/lib:/usr/lib
-export TNS_ADMIN=$ORACLE_HOME/network/admin
-export SQLPATH=$SQLPATH
+export ORACLE_BASE=${ORACLE_BASE}
+export ORACLE_HOME=${ORACLE_HOME}
+export PATH=${ORACLE_HOME}/bin:${ORACLE_HOME}/OPatch/:/usr/sbin:${PATH} 
+export CLASSPATH=${ORACLE_HOME}/jlib:${ORACLE_HOME}/rdbms/jlib
+export LD_LIBRARY_PATH=${ORACLE_HOME}/lib:/usr/lib
+export TNS_ADMIN=${ORACLE_HOME}/network/admin
+export SQLPATH=${SQLPATH}
 
 export ORACLE_SID=${ORACLE_SID}
 #export ORACLE_SID=${ORACLE_SID^^}
-$PDBENV
+${PDBENV}
 EOF
 
        if [ "$(rlwrap -v)" ]
      then cat << EOF >> "$HOME"/.bashrc
 alias sqlplus="rlwrap \$ORACLE_HOME/bin/sqlplus"
 alias rman="rlwrap \$ORACLE_HOME/bin/rman"
+alias dgmgrl="rlwrap \$ORACLE_HOME/bin/dgmgrl"
 EOF
      fi > /dev/null 2>&1
 
@@ -831,6 +928,16 @@ EOF
      then echo "set pages 9999 lines 200" > "$SQLPATH"/login.sql
      fi
 
+     # Run DBCA if this is a standalone database or primary in a Data Guard configuration
+       if [ -z "$ROLE" ]
+     then runDBCA
+     elif [ "$ROLE" = "PRIMARY" ]
+     then runDBCA
+          setupDG "$ROLE"
+     else setupDG "$ROLE"
+     fi
+
+     moveFiles
      runUserScripts "$ORACLE_BASE"/scripts/setup
 fi
 
@@ -838,7 +945,12 @@ fi
   if HealthCheck
 #  if [ "$?" -eq 0 ]
 then runUserScripts "$ORACLE_BASE"/scripts/setup
-     logger BA "Database $ORACLE_SID is open and available."
+       if [ -n "$DB_UNQNAME" ]
+     then msg="$ORACLE_SID with unique name $DB_UNQNAME"
+     else msg="$ORACLE_SID"
+     fi
+# TODO: Report the correct open mode
+     logger BA "Database $msg is open and available."
 else warn "Database setup for $ORACLE_SID was unsuccessful."
      warn "Check log output for additional information."
 fi

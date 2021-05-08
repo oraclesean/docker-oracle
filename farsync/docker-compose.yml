@@ -1,72 +1,107 @@
 version: '3'
-services: 
+services:
   APPPROD:
-    image: oraclesean/db:19.9-ee
+    image: oraclesean/db:19.11-ee
     container_name: APPPROD
     volumes:
-      - "FS_APPPROD:/opt/oracle/oradata"
-      - "FS_SHARE:/share"
+      - FS_APPPROD:/u01/app/oracle/oradata
+      - /home/lab/docker/farsync:/docker
     environment:
       CONTAINER_NAME: APPPROD
       ORACLE_SID: APPPROD
       DB_UNQNAME: APPPROD
       ORACLE_PWD: oracle
       PDB_COUNT: 0
+      PDB_NAME: 
       ROLE: PRIMARY
-    ports:
-      - "10021:1521"
+      DG_TARGET: APPS1DB,APPS2DB
+      SETUP_DIR: /docker
+      BROKER_SCRIPT: dg_broker.dgs
+      BROKER_CHECKS: dg_check.dgs
+      SETUP_PRIMARY: dg_setup_primary
+      RMAN_DUPLICATE: rman_duplicate
+      OPEN_MODE: OPEN
 
-  APPDRDB:
-    image: oraclesean/db:19.9-ee
-    container_name: APPDRDB
+    ports:
+      - 10000:1521
+
+  APPS1DB:
+    image: oraclesean/db:19.11-ee
+    container_name: APPS1DB
     volumes:
-      - "FS_APPDRDB:/opt/oracle/oradata"
-      - "FS_SHARE:/share"
+      - FS_APPS1DB:/u01/app/oracle/oradata
+      - /home/lab/docker/farsync:/docker
     environment:
-      CONTAINER_NAME: APPDRDB
+      CONTAINER_NAME: APPS1DB
       ORACLE_SID: APPPROD
-      DB_UNQNAME: APPDRDB
+      DB_UNQNAME: APPS1DB
       ORACLE_PWD: oracle
       PDB_COUNT: 0
+      PDB_NAME: 
       ROLE: STANDBY
+      DG_TARGET: APPPROD
+      SETUP_DIR: /docker
+      BROKER_SCRIPT: dg_broker.dgs
+      BROKER_CHECKS: dg_check.dgs
+      SETUP_PRIMARY: dg_setup_primary
+      RMAN_DUPLICATE: rman_duplicate
+      OPEN_MODE: APPLY
+
     ports:
-      - "10022:1521"
+      - 10001:1521
+
+  APPS2DB:
+    image: oraclesean/db:19.11-ee
+    container_name: APPS2DB
+    volumes:
+      - FS_APPS2DB:/u01/app/oracle/oradata
+      - /home/lab/docker/farsync:/docker
+    environment:
+      CONTAINER_NAME: APPS2DB
+      ORACLE_SID: APPPROD
+      DB_UNQNAME: APPS2DB
+      ORACLE_PWD: oracle
+      PDB_COUNT: 0
+      PDB_NAME: 
+      ROLE: STANDBY
+      DG_TARGET: APPPROD
+      SETUP_DIR: /docker
+      BROKER_SCRIPT: dg_broker.dgs
+      BROKER_CHECKS: dg_check.dgs
+      SETUP_PRIMARY: dg_setup_primary
+      RMAN_DUPLICATE: rman_duplicate
+      OPEN_MODE: APPLY
+
+    ports:
+      - 10002:1521
 
   APPFSDB:
-    image: oraclesean/db:19.9-ee
+    image: oraclesean/db:19.11-ee
     container_name: APPFSDB
     volumes:
-      - "FS_APPFSDB:/opt/oracle/oradata"
-      - "FS_SHARE:/share"
+      - FS_APPFSDB:/u01/app/oracle/oradata
+      - /home/lab/docker/farsync:/docker
     environment:
       CONTAINER_NAME: APPFSDB
       ORACLE_SID: APPPROD
       DB_UNQNAME: APPFSDB
       ORACLE_PWD: oracle
       PDB_COUNT: 0
+      PDB_NAME: 
       ROLE: FARSYNC
-    ports:
-      - "10023:1521"
+      DG_TARGET: 
+      SETUP_DIR: /docker
+      BROKER_SCRIPT: dg_broker.dgs
+      BROKER_CHECKS: dg_check.dgs
+      SETUP_PRIMARY: dg_setup_primary
+      RMAN_DUPLICATE: rman_duplicate
+      OPEN_MODE: MOUNT
 
-  APPNPDB:
-    image: oraclesean/db:19.9-ee
-    container_name: APPNPDB
-    volumes:
-      - "FS_APPNPDB:/opt/oracle/oradata"
-      - "FS_SHARE:/share"
-    environment:
-      CONTAINER_NAME: APPNPDB
-      ORACLE_SID: APPPROD
-      DB_UNQNAME: APPNPDB
-      ORACLE_PWD: oracle
-      PDB_COUNT: 0
-      ROLE: STANDBY
     ports:
-      - "10024:1521"
+      - 10003:1521
 
 volumes:
   FS_APPPROD:
-  FS_APPDRDB:
+  FS_APPS1DB:
+  FS_APPS2DB:
   FS_APPFSDB:
-  FS_APPNPDB:
-  FS_SHARE:

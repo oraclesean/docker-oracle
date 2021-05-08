@@ -1,5 +1,5 @@
-# Host    | ID | IMAGE  | ORACLE_SID  | DB_UNQNAME | ORACLE_PWD | PDB_COUNT | PDB_NAME | Role    | ROUTE_PRI |
-PHOENIX   | 0  | new199 | PROD        | PHOENIX    | oracle     | 0         |          | PRIMARY | 0         |
-DALLAS    | 1  | new199 | PROD        | DALLAS     | oracle     | 0         |          | STANDBY | 8         |
-DENVER    | 2  | new199 | PROD        | DENVER     | oracle     | 0         |          | STANDBY | 8         |
-VEGAS     | 3  | new199 | PROD        | VEGAS      | oracle     | 0         |          | FARSYNC | 1         |
+# Host  | ID | IMAGE                  | ORACLE_SID | DB_UNQNAME | ORACLE_PWD | PDB_COUNT | PDB_NAME | Role    | ROUTE_PRI | DG_TARGET       | SYNC_MODE | MAXFAIL | OPEN_MODE
+APPPROD | 0  | oraclesean/db:19.11-ee | APPPROD    | APPPROD    | oracle     | 0         |          | PRIMARY | 0         | APPS1DB,APPS2DB | SYNC      | 0       | OPEN
+APPS1DB | 1  | oraclesean/db:19.11-ee | APPPROD    | APPS1DB    | oracle     | 0         |          | STANDBY | 8         | APPPROD         | ASYNC     | 1       | APPLY
+APPS2DB | 2  | oraclesean/db:19.11-ee | APPPROD    | APPS2DB    | oracle     | 0         |          | STANDBY | 8         | APPPROD         | ASYNC     | 1       | APPLY
+APPFSDB | 3  | oraclesean/db:19.11-ee | APPPROD    | APPFSDB    | oracle     | 0         |          | FARSYNC | 1         |                 | SYNC      | 1       | MOUNT
