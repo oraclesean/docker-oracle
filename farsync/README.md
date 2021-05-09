@@ -13,20 +13,20 @@ The `config-dataguard.lst` file contains information on each member of the Data 
 * The ORACLE_PWD must be identical for all members
 * ROLE must be PRIMARY, STANDBY, or FARSYNC
 * DG_TARGET
-** On standby databases = the DB_UNQNAME of the PRIMARY
-** On the primary = a comma-delimited list of each standby DB_UNQNAME
-** On the far sync = NULL
+  * On standby databases = the DB_UNQNAME of the PRIMARY
+  * On the primary = a comma-delimited list of each standby DB_UNQNAME
+  * On the far sync = NULL
 * OPEN_MODE
-** Always OPEN for the primary
-** Always MOUNT for the far sync
-** APPLY on the standby will activate managed recovery, otherwise the database will open READ ONLY automatically
+  * Always OPEN for the primary
+  * Always MOUNT for the far sync
+  * APPLY on the standby will activate managed recovery, otherwise the database will open READ ONLY automatically
 ## Customize `create_compose.sh`
 * Update the value of ORADATA to match the ORADATA directory of your image
 * SETUP_DIR is the mount point where the current script directory will be mounted
 * The ORADATA directories will be mounted in Docker volumes (FS_${CONTAINER_NAME}). If you would like the volumes bind mounted:
-** Add a generic path (eg, `/somedir/oradata`)
-** Make sure the path exists on the local system
-** On Linux systems, create a subdirectory under this path for each container name (`/somedir/oradata/container_name`) and chown these directories to be owned by `oracle:dba` or `oracle:oinstall`
+  * Add a generic path (eg, `/somedir/oradata`)
+  * Make sure the path exists on the local system
+  * On Linux systems, create a subdirectory under this path for each container name (`/somedir/oradata/container_name`) and chown these directories to be owned by `oracle:dba` or `oracle:oinstall`
 # Run `create_compose.sh`
 Make `create_compose.sh` executable on your system and run it. This will create:
 * `docker-compose.yml`: defines all of the services (databases)
