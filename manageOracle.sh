@@ -908,7 +908,7 @@ export PATH=${ORACLE_HOME}/bin:${ORACLE_HOME}/OPatch/:/usr/sbin:${PATH}
 export CLASSPATH=${ORACLE_HOME}/jlib:${ORACLE_HOME}/rdbms/jlib
 export LD_LIBRARY_PATH=${ORACLE_HOME}/lib:/usr/lib
 export TNS_ADMIN=${ORACLE_HOME}/network/admin
-export SQLPATH=${SQLPATH}
+export ORACLE_PATH=${ORACLE_PATH}
 
 export ORACLE_SID=${ORACLE_SID}
 #export ORACLE_SID=${ORACLE_SID^^}
@@ -924,8 +924,8 @@ EOF
      fi > /dev/null 2>&1
 
      # Create login.sql
-       if [ -n "$SQLPATH" ]
-     then echo "set pages 9999 lines 200" > "$SQLPATH"/login.sql
+       if [ -n "$ORACLE_PATH" ]
+     then echo "set pages 9999 lines 200" > "$ORACLE_PATH"/login.sql
      fi
 
      # Run DBCA if this is a standalone database or primary in a Data Guard configuration

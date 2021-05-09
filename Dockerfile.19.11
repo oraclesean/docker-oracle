@@ -21,7 +21,7 @@ ARG PDB_COUNT=1
 
 # Directory defaults
 ARG SCRIPTS_DIR=/opt/scripts
-ARG SQLPATH=/home/oracle
+ARG ORACLE_PATH=/home/oracle
 
 # Build defaults
 ARG RPM_LIST="oracle-epel-release-el7 file-5.11 git less strace sudo tree vi which"
@@ -53,7 +53,7 @@ LABEL volume.oraclehome="$ORACLE_HOME"
 LABEL volume.data="$ORADATA"
 LABEL volume.scripts="$SCRIPTS_DIR"
 LABEL volume.scripts.manage="$MANAGE_ORACLE"
-LABEL volume.sqlpath="$SQLPATH"
+LABEL volume.sqlpath="$ORACLE_PATH"
 LABEL port.listener.listener1="1521"
 LABEL port.oemexpress="5500"
 LABEL port.http="8080"
@@ -71,7 +71,7 @@ ENV ORACLE_BASE=$ORACLE_BASE \
     ORACLE_SID=$ORACLE_SID \
     ORACLE_PDB=$ORACLE_PDB \
     PDB_COUNT=$PDB_COUNT \
-    SQLPATH=$SQLPATH \
+    ORACLE_PATH=$ORACLE_PATH \
     SCRIPTS_DIR=$SCRIPTS_DIR \
     MANAGE_ORACLE=$MANAGE_ORACLE \
     DEBUG=$DEBUG
