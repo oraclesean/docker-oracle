@@ -620,9 +620,7 @@ moveFiles() {
     if [ -f /etc/oratab ] && [ ! -f "$__dbconfig/oratab" ]
   then cp /etc/oratab "$__dbconfig"/ 2>/dev/null
   fi
-    if [ -f "$__dbconfig/oratab" ] && [ ! -f /etc/oratab ]
-  then cp "$__dbconfig"/oratab /etc/oratab 2>/dev/null
-  fi
+  cp "$__dbconfig"/oratab /etc/oratab 2>/dev/null
 
   # Find wallet subdirectories in dbconfig and relink them:
     if [ -f "$__dbconfig/sqlnet.ora" ]
