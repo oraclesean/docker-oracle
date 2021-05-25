@@ -77,6 +77,12 @@ I wanted images capable of running highly customizable database environments out
 - `PDB_LIST`: A comma-delimited list of PDB names. When present, overrides the PDB_COUNT and ORACLE_PDB values.
 - `ORACLE_CHARACTERSET` and `ORACLE_NLS_CHARACTERSET`: Set database character sets.
 - `INIT_PARAMS`: A list of parameters to set in the database at creation time. The default sets the DB_CREATE_FILE_DEST, DB_CREATE_ONLINE_LOG_DEST_1, and DB_RECOVERY_FILE_DEST to $ORADATA (enabling OMF) and turns off auditing.
+## DEBUG mode
+Debug image builds, container creation, or container operation. 
+- Use `--build-arg DEBUG="bash -x"` to debug image builds
+- Use `-e DEBUG="bash -x"` to debug container creation
+- Use `export DEBUG="bash -x"` to turn on debugging output in a running container
+- Use `unset DEBUG` to turn debugging off in a running container
 # Examples
 Create a non-container database:  
 `docker run -d -e PDB_COUNT=0 IMG_NAME`  
