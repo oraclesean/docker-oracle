@@ -617,8 +617,9 @@ moveFiles() {
        fi
   done
 
-  cp /etc/oratab "$__dbconfig"/ 2>/dev/null
-
+    if [ -f /etc/oratab ] && [ ! -f "$__dbconfig/oratab" ]
+  then cp /etc/oratab "$__dbconfig"/ 2>/dev/null
+  fi
     if [ -f "$__dbconfig/oratab" ] && [ ! -f /etc/oratab ]
   then cp "$__dbconfig"/oratab /etc/oratab 2>/dev/null
   fi
