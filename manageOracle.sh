@@ -365,6 +365,8 @@ installOracle() {
                         rm -fr "$__oracle_home"/ords 2>/dev/null ;;
                  OUI)   # OUI inventory backups
                         rm -fr "$__oracle_home"/inventory/backup/* 2>/dev/null ;;
+                 PATCH) # Patch storage
+                        rm -fr "$__oracle_home"/.patch_storage 2>/dev/null ;;
                  PILOT) # Pilot workflow
                         rm -fr "$__oracle_home"/install/pilot 2>/dev/null ;;
                  SQLD)  # SQL Developer
