@@ -56,6 +56,9 @@ Each Dockerfile uses a set of common ARG values. Defaults are set in each Docker
 - Add programs/binaries at build time as variables, rather than in a script. Hey, sometimes you want editors or `strace` or `git`, sometimes you don't. Set the defaults to your preferred set of binaries. Override them at build time as necessary, again without having to edit/revert any files.
 - Some database versions may require special RPM. Rather than maintaining that in scripts, it's in the Dockerfile (configuration).
 - Add supplemental RPMs. Some RPM have dependencies (such as `rlwrap`) that require a second execution of `rpm install`. All builds treat this the same way.
+  - The RPM list includes tools for interactive use of containers. 
+  - Remove git, less, strace, tree, vi, which, and bash-completion for non-interactive environments
+  - sudo is used to run installations from the manageOracle.sh script
 - All builds are multi-stage with identical steps, users and operations. Differences are handled by the management script by reading configuration information from the Dockerfile, discovered in the file structure, or set in the environment.
 - Customizing the directories for `ORACLE_BASE`, `ORACLE_HOME`, `oraInventory`, and the `oradata` directory.
 ## Install Oracle from Archive (ZIP) or RPM
@@ -91,4 +94,6 @@ Create a container database with custom SID and PDB name:
 Create a container database with a default SID and three PDB named mypdb[1,2,3]:  
 `docker run -d -e PDB_COUNT=3 -e ORACLE_PDB=mypdb IMG_NAME`  
 Create a container database with custom SID and named PDB:  
-`docker run -d -e ORACLE_SID=mydb -e PDB_LIST="test,dev,prod" IMG_NAME`  
+`docker run -d -e ORACLE_SID=mydb -e PDB_LIST="test,dev,prod" IMG_NAME`
+# TODO
+- Remove sudo option for building containers. It's only used during software installation and isn't required in final images.
