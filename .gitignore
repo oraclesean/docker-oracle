@@ -1,6 +1,7 @@
 */**/*.zip
 */**/*.rpm
 .dockerignore
+.gitignore
 #*/install/patches/0*
 /demos
 /docker-images
@@ -9,3 +10,6 @@
 /farsync/srdc*
 /farsync/tnsnames.ora
 /farsync/listener.ora
+/farsync/*.sql
+/farsync/*.dgs
+/farsync/*.rman
