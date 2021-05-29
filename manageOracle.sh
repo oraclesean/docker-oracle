@@ -346,7 +346,7 @@ installOracle() {
 
   # Minimize the installation
     if [ -n "$REMOVE_COMPONENTS" ]
-  then local __rc=${1^^}
+  then local __rc=${REMOVE_COMPONENTS^^}
 
        OLDIFS=$IFS
        IFS=,
