@@ -61,6 +61,7 @@ Each Dockerfile uses a set of common ARG values. Defaults are set in each Docker
   - sudo is used to run installations from the manageOracle.sh script
 - All builds are multi-stage with identical steps, users and operations. Differences are handled by the management script by reading configuration information from the Dockerfile, discovered in the file structure, or set in the environment.
 - Customizing the directories for `ORACLE_BASE`, `ORACLE_HOME`, `oraInventory`, and the `oradata` directory.
+- Specify Read-Only Oracle Home (ROOH). Set `ROOH=ENABLE` in the Dockerfile, or pass `--build-arg ROOH=ENABLE` during build.
 ## Install Oracle from Archive (ZIP) or RPM
 RPM builds operate a little differently. They have a dependency on `root` because database configuration and startup is managed through `/etc/init.d`. The configuration is in `/etc/sysconfig`. If left at their default (I have a repo for building default RPM-based Oracle installations elsewhere) they need `root` and pose a security risk. I experimented with workarounds (adding `oracle` to `sudoers`, changing the `/etc/init.d` script group to `oinstall`, etc) but RPM-created databases still ran differently.   
 
