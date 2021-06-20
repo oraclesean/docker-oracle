@@ -141,6 +141,10 @@ configENV() {
   fi
 
   mkdir -p {"$ORACLE_INV","$ORACLE_HOME","$__target_home","$ORADATA"/{dbconfig,fast_recovery_area},"$ORACLE_BASE"/{admin,scripts/{setup,startup}}} || error "Failure creating directories."
+   case $ORACLE_VERSION in
+        18.*|19.*|21.*) if [ "${ROOH^^}" = "ENABLE" ]; then mkdir -p "$ORACLE_BASE"/{dbs,homes} || error "Failure creating directories."; fi
+                        ;;
+   esac
   chown -R oracle:oinstall "$SCRIPTS_DIR" "$ORACLE_INV" "$ORACLE_BASE" "$ORADATA" "$__target_home"                            || error "Failure changing directory ownership."
   ln -s "$ORACLE_BASE"/scripts /docker-entrypoint-initdb.d                                                                    || error "Failure setting Docker entrypoint."
   echo oracle:oracle | chpasswd                                                                                               || error "Failure setting the oracle user password."
@@ -164,6 +168,14 @@ checkSum() {
   done
 }
 
+setBase() {
+  case $ORACLE_VERSION in
+       18.*|19.*|21.*) export ORACLE_BASE_CONFIG="$(orabaseconfig)/dbs"
+                       export ORACLE_BASE_HOME="$(orabasehome)" ;;
+                    *) export ORACLE_BASE_CONFIG="$ORACLE_HOME/dbs"
+                       export ORACLE_BASE_HOME="$ORACLE_HOME" ;;
+  esac
+}
 installOracle() {
   set -e
 
@@ -384,6 +396,11 @@ installOracle() {
        IFS=$OLDIFS
   fi
 
+  # Enable read-only Oracle Home:
+  case $ORACLE_VERSION in
+       18.*|19.*|21.*) if [ "${ROOH^^}" = "ENABLE" ]; then sudo su - oracle -c "$__oracle_home/bin/roohctl -enable"; unset ROOH; fi ;;
+  esac
+
   # Revert /etc/pam.d/su:
   sed -i -e "s|^\(#\)\(session\s*include\s*system-auth\)|\2|" /etc/pam.d/su
 }
@@ -441,6 +458,7 @@ checkMode() {
 
 setupDG() {
   dbrole=$1 
+  setBase
     if [ "$dbrole" = "PRIMARY" ]
   then "$ORACLE_HOME"/bin/sqlplus / as sysdba @"$SETUP_DIR"/"$SETUP_PRIMARY".sql
         for duplicate in $(find "$SETUP_DIR"/"$RMAN_DUPLICATE".*.rman)
@@ -459,15 +477,15 @@ setupDG() {
        touch "$ORACLE_BASE"/diag/rdbms/"${DB_UNQNAME,,}"/"$ORACLE_SID"/trace/alert_"$ORACLE_SID".log
        printf "%s:%s:N\n" "$ORACLE_SID" "$ORACLE_HOME" > /etc/oratab
        # Create a pfile for startup of the DG replica
-       cat <<- EOF > "$ORACLE_HOME"/dbs/init"$ORACLE_SID".ora
+       cat <<- EOF > "$ORACLE_BASE_CONFIG"/init"$ORACLE_SID".ora
         *.db_name=${ORACLE_SID}
         *.db_unique_name=${DB_UNQNAME}
 	*.pga_aggregate_target=10M
 	*.sga_target=600M
 EOF
        # Create a password file
-       "$ORACLE_HOME"/bin/orapwd file="$ORACLE_HOME"/dbs/orapw"$ORACLE_SID" force=yes format=12 <<< $(echo "$ORACLE_PWD")
-       echo "startup nomount pfile='${ORACLE_HOME}/dbs/init${ORACLE_SID}.ora';" | "$ORACLE_HOME"/bin/sqlplus / as sysdba
+       "$ORACLE_HOME"/bin/orapwd file="$ORACLE_BASE_CONFIG"/orapw"$ORACLE_SID" force=yes format=12 <<< $(echo "$ORACLE_PWD")
+       echo "startup nomount pfile='${ORACLE_BASE_CONFIG}/init${ORACLE_SID}.ora';" | "$ORACLE_HOME"/bin/sqlplus / as sysdba
        # Start listener
        "$ORACLE_HOME"/bin/lsnrctl start
        # Wait for the database to come online
@@ -601,14 +619,16 @@ moveFiles() {
   then mkdir -p "$ORADATA"/dbconfig/"$ORACLE_SID"
   fi
 
+  setBase
+
   local __dbconfig="$ORADATA"/dbconfig/"$ORACLE_SID"
 
-   for filename in "$ORACLE_HOME"/dbs/init"$ORACLE_SID".ora \
-                   "$ORACLE_HOME"/dbs/spfile"$ORACLE_SID".ora \
-                   "$ORACLE_HOME"/dbs/orapw"$ORACLE_SID" \
-                   "$ORACLE_HOME"/network/admin/listener.ora \
-                   "$ORACLE_HOME"/network/admin/tnsnames.ora \
-                   "$ORACLE_HOME"/network/admin/sqlnet.ora
+   for filename in "$ORACLE_BASE_CONFIG"/init"$ORACLE_SID".ora \
+                   "$ORACLE_BASE_CONFIG"/spfile"$ORACLE_SID".ora \
+                   "$ORACLE_BASE_CONFIG"/orapw"$ORACLE_SID" \
+                   "$ORACLE_BASE_HOME"/network/admin/listener.ora \
+                   "$ORACLE_BASE_HOME"/network/admin/tnsnames.ora \
+                   "$ORACLE_BASE_HOME"/network/admin/sqlnet.ora
     do
        file=$(basename "$filename")
          if [ -f "$filename" ] && [ ! -f "$__dbconfig/$file" ]
@@ -649,7 +669,8 @@ moveFiles() {
 
 addTNSEntry() {
   ALIAS=$1
-  cat << EOF >> "$ORACLE_HOME"/network/admin/tnsnames.ora
+  setBase
+  cat << EOF >> "$ORACLE_BASE_HOME"/network/admin/tnsnames.ora
 ${ALIAS} =
   (DESCRIPTION =
     (ADDRESS = (PROTOCOL = TCP)(HOST = ${CONTAINER_NAME=0.0.0.0})(PORT = 1521))
@@ -861,12 +882,13 @@ fi
 # Check whether database already exists
   if [ "$(grep -Ec "^$ORACLE_SID\:" /etc/oratab)" -eq 1 ] && [ -d "$ORADATA"/"${ORACLE_SID^^}" ] || [ -d "$ORADATA"/"${ORACLE_SID}" ]
 then moveFiles
-     startDB 
+     startDB
 else # Create the TNS configuration
-     mkdir -p "$ORACLE_HOME"/network/admin 2>/dev/null
-     echo "NAME.DIRECTORY_PATH=(TNSNAMES, EZCONNECT, HOSTNAME)" > "$ORACLE_HOME"/network/admin/sqlnet.ora
+     setBase
+     mkdir -p "$ORACLE_BASE_HOME"/network/admin 2>/dev/null
+     echo "NAME.DIRECTORY_PATH=(TNSNAMES, EZCONNECT, HOSTNAME)" > "$ORACLE_BASE_HOME"/network/admin/sqlnet.ora
 
-     cat << EOF > "$ORACLE_HOME"/network/admin/listener.ora
+     cat << EOF > "$ORACLE_BASE_HOME"/network/admin/listener.ora
 LISTENER = 
   (DESCRIPTION_LIST = 
     (DESCRIPTION = 
@@ -889,8 +911,8 @@ DIAG_ADR_ENABLED = off
 EOF
 
        if [ -f "$SETUP_DIR"/tnsnames.ora ]
-     then cp "$SETUP_DIR"/tnsnames.ora "$ORACLE_HOME"/network/admin/tnsnames.ora
-     else echo "$ORACLE_SID=localhost:1521/$ORACLE_SID" > "$ORACLE_HOME"/network/admin/tnsnames.ora
+     then cp "$SETUP_DIR"/tnsnames.ora "$ORACLE_BASE_HOME"/network/admin/tnsnames.ora
+     else echo "$ORACLE_SID=localhost:1521/$ORACLE_SID" > "$ORACLE_BASE_HOME"/network/admin/tnsnames.ora
      fi
 
      # Create a database password if none exists
@@ -908,7 +930,7 @@ export ORACLE_HOME=${ORACLE_HOME}
 export PATH=${ORACLE_HOME}/bin:${ORACLE_HOME}/OPatch/:/usr/sbin:${PATH} 
 export CLASSPATH=${ORACLE_HOME}/jlib:${ORACLE_HOME}/rdbms/jlib
 export LD_LIBRARY_PATH=${ORACLE_HOME}/lib:/usr/lib
-export TNS_ADMIN=${ORACLE_HOME}/network/admin
+export TNS_ADMIN=${ORACLE_BASE_HOME}/network/admin
 export ORACLE_PATH=${ORACLE_PATH}
 
 export ORACLE_SID=${ORACLE_SID}

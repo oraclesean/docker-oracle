@@ -13,3 +13,4 @@
 /farsync/*.sql
 /farsync/*.dgs
 /farsync/*.rman
+Dockerfile.Upgrade
