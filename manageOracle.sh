@@ -853,9 +853,7 @@ fi
 
 # Validate SID, PDB names
 __oracle_sid=${ORACLE_SID:-ORCLCDB}
-__oracle_pdb=${ORACLE_PDB}
 __pdb_count=${PDB_COUNT:-0}
-__pdb_list=${PDB_LIST}
 
 # Validate the SID:
   if [ "${#__oracle_sid}" -gt 12 ]
@@ -863,17 +861,17 @@ then error "The SID may not be longer than 12 characters"
 elif [[ "$__oracle_sid" =~ [^a-zA-Z0-9] ]]
 then error "The SID must be alphanumeric"
 # Check PDB settings.
-elif [ -z "$__oracle_pdb" ] && [ "$__pdb_count" -eq 0 ] && [ -z "$__pdb_list" ]
+elif [ -z "$ORACLE_PDB" ] && [ "$__pdb_count" -eq 0 ] && [ -z "$PDB_LIST" ]
 then # No PDB name + no PDB count + no PDB list = Not a container DB
      export ORACLE_SID=${__oracle_sid:-ORCL}
      unset ORACLE_PDB
      unset PDB_COUNT
      unset PDB_LIST
-elif [ -z "$__oracle_pdb" ] && [ "$__pdb_count" -gt 0 ]
+elif [ -z "$ORACLE_PDB" ] && [ "$__pdb_count" -gt 0 ]
 then # No PDB name but PDB count > 0
      export ORACLE_PDB=ORCLPDB
 else export ORACLE_SID=$__oracle_sid
-     export ORACLE_PDB=$__oracle_pdb
+     export ORACLE_PDB=$ORACLE_PDB
 fi
 
 # Check the audit path
