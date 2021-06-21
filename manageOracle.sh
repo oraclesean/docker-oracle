@@ -204,7 +204,8 @@ installOracle() {
 
    for var in ORACLE_EDITION \
               ORACLE_INV \
-              ORACLE_BASE
+              ORACLE_BASE \
+              ORADATA
     do
        replaceVars "$INSTALL_DIR"/"$INSTALL_RESPONSE" "$var"
   done
@@ -503,6 +504,7 @@ EOF
 runDBCA() {
   local __version=$(echo "$ORACLE_VERSION" | cut -d. -f1)
   local __dbcaresponse="$ORACLE_BASE"/dbca."$ORACLE_SID".rsp
+  local __pdb_count=${PDB_COUNT:-0}
 
   "$ORACLE_HOME"/bin/lsnrctl start
   unset __pdb_only
@@ -554,15 +556,15 @@ runDBCA() {
        done
        IFS=$OLDIFS
        alterPluggableDB
-  elif [ "$__version" != "11" ] && [ "$PDB_COUNT" -gt 0 ]
+  elif [ "$__version" != "11" ] && [ "$__pdb_count" -gt 0 ]
   then PDB_ADMIN=PDBADMIN
-       logger A "${FUNCNAME[0]}: Creating container database $__db_msg and $PDB_COUNT pluggable database(s) with name $ORACLE_PDB"
-       createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE "$PDB_COUNT" "$ORACLE_PDB" "$PDB_ADMIN"
-         if [ "$PDB_COUNT" -eq 1 ]
+       logger A "${FUNCNAME[0]}: Creating container database $__db_msg and $__pdb_count pluggable database(s) with name $ORACLE_PDB"
+       createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE "$__pdb_count" "$ORACLE_PDB" "$PDB_ADMIN"
+         if [ "$__pdb_count" -eq 1 ]
        then PDBENV="export ORACLE_PDB=$ORACLE_PDB"
             addTNSEntry "$ORACLE_PDB"
        else PDBENV="export ORACLE_PDB=${ORACLE_PDB}1"
-             for ((PDB_NUM=1; PDB_NUM<=PDB_COUNT; PDB_NUM++))
+             for ((PDB_NUM=1; PDB_NUM<=__pdb_count; PDB_NUM++))
               do addTNSEntry "${ORACLE_PDB}""${PDB_NUM}"
             done
        fi
