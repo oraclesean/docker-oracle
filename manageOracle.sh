@@ -210,10 +210,6 @@ installOracle() {
        replaceVars "$INSTALL_DIR"/"$INSTALL_RESPONSE" "$var"
   done
        replaceVars "$INSTALL_DIR"/"$INSTALL_RESPONSE" "ORACLE_HOME" "$__oracle_home"
-#  sed -i -e "s|###ORACLE_EDITION###|$ORACLE_EDITION|g" \
-#         -e "s|###ORACLE_INV###|$ORACLE_INV|g" \
-#         -e "s|###ORACLE_BASE###|$ORACLE_BASE|g" \
-#         -e "s|###ORACLE_HOME###|$__oracle_home|g" "$INSTALL_DIR"/"$INSTALL_RESPONSE"
 
   # Fix a problem that prevents root from su - oracle:
   sed -i -e "s|\(^session\s*include\s*system-auth\)|#\1|" /etc/pam.d/su
@@ -503,76 +499,93 @@ EOF
 
 runDBCA() {
   local __version=$(echo "$ORACLE_VERSION" | cut -d. -f1)
-  local __dbcaresponse="$ORACLE_BASE"/dbca."$ORACLE_SID".rsp
-  local __pdb_count=${PDB_COUNT:-0}
-
-  "$ORACLE_HOME"/bin/lsnrctl start
-  unset __pdb_only
-
   # Default init parameters
   local INIT_PARAMS=${INIT_PARAMS:-db_create_file_dest=${ORADATA},db_create_online_log_dest_1=${ORADATA},db_recovery_file_dest=${ORADATA}/fast_recovery_area,audit_trail=none,audit_sys_operations=false}
     if ! [[ $INIT_PARAMS =~ = ]]
   then error "Invalid value provided for INIT_PARAMS: $INIT_PARAMS"
   fi
 
-  # Allow DB unique names:
-    if [ -n "$DB_UNQNAME" ] && [ "$DB_UNQNAME" != "$ORACLE_SID" ]
-  then __db_msg="$ORACLE_SID with unique name $DB_UNQNAME"
-       INIT_PARAMS="${INIT_PARAMS},db_unique_name=$DB_UNQNAME"
-  else DB_UNQNAME=$ORACLE_SID
-       __db_msg="$ORACLE_SID"
-  fi
-
-  logger B "${FUNCNAME[0]}: Running DBCA for database $__db_msg"
-
-  # Additional messages for Data Guard:
-    if [ -n "$CONTAINER_NAME" ]; then logger x "${FUNCNAME[0]}:        Container name is: $CONTAINER_NAME"; fi
-    if [ -n "$ROLE" ];           then logger x "${FUNCNAME[0]}:        Container role is: $ROLE";           fi
-    if [ -n "$DG_TARGET" ];      then logger x "${FUNCNAME[0]}:   Container DG Target is: $DG_TARGET";      fi
-
-  # Detect custom DBCA response files:
-  cp "$ORADATA"/dbca."$ORACLE_SID".rsp "$__dbcaresponse" 2>/dev/null || cp "$ORADATA"/dbca.rsp "$__dbcaresponse" 2>/dev/null || cp "$SCRIPTS_DIR"/dbca.rsp "$__dbcaresponse"
-
-    if [ "$__version" != "11" ] && [ -n "$PDB_LIST" ]
-  then OLDIFS=$IFS
-       IFS=,
-       PDB_NUM=1
-       PDB_ADMIN=PDBADMIN
-        for ORACLE_PDB in $PDB_LIST
-         do
-            IFS=$OLDIFS
-              if [ "$PDB_NUM" -eq 1 ]
-            then # Create the database and the first PDB
-                 logger A "${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $ORACLE_PDB"
-                 createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
-                 PDBENV="export ORACLE_PDB=$ORACLE_PDB"
-            else # Create additional PDB
-                 logger A "${FUNCNAME[0]}: Creating pluggable database $ORACLE_PDB"
-                 createDatabase NONE NONE TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
-            fi
-            addTNSEntry "$ORACLE_PDB"
-            PDB_NUM=$((PDB_NUM+1))
-            IFS=,
-       done
+  SID_LIST=${SID_LIST:-$ORACLE_SID}
+  OLDIFS=$IFS
+  IFS=,
+  SID_NUM=1
+   for ORACLE_SID in $SID_LIST
+    do
        IFS=$OLDIFS
-       alterPluggableDB
-  elif [ "$__version" != "11" ] && [ "$__pdb_count" -gt 0 ]
-  then PDB_ADMIN=PDBADMIN
-       logger A "${FUNCNAME[0]}: Creating container database $__db_msg and $__pdb_count pluggable database(s) with name $ORACLE_PDB"
-       createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE "$__pdb_count" "$ORACLE_PDB" "$PDB_ADMIN"
-         if [ "$__pdb_count" -eq 1 ]
-       then PDBENV="export ORACLE_PDB=$ORACLE_PDB"
-            addTNSEntry "$ORACLE_PDB"
-       else PDBENV="export ORACLE_PDB=${ORACLE_PDB}1"
-             for ((PDB_NUM=1; PDB_NUM<=__pdb_count; PDB_NUM++))
-              do addTNSEntry "${ORACLE_PDB}""${PDB_NUM}"
-            done
+       local __dbcaresponse="$ORACLE_BASE"/dbca."$ORACLE_SID".rsp
+       local __pdb_count=${PDB_COUNT:-0}  
+       # Detect custom DBCA response files:
+       cp "$ORADATA"/dbca."$ORACLE_SID".rsp "$__dbcaresponse" 2>/dev/null || cp "$ORADATA"/dbca.rsp "$__dbcaresponse" 2>/dev/null || cp "$SCRIPTS_DIR"/dbca.rsp "$__dbcaresponse"
+
+       # Allow DB unique names:
+         if [ -n "$DB_UNQNAME" ] && [ "$DB_UNQNAME" != "$ORACLE_SID" ]
+       then __db_msg="$ORACLE_SID with unique name $DB_UNQNAME"
+            INIT_PARAMS="${INIT_PARAMS},db_unique_name=$DB_UNQNAME"
+       else DB_UNQNAME=$ORACLE_SID
+            __db_msg="$ORACLE_SID"
        fi
-       alterPluggableDB
-  else logger A "${FUNCNAME[0]}: Creating database $__db_msg"
-       createDatabase "$__dbcaresponse" "$INIT_PARAMS" FALSE
-       PDBENV="unset ORACLE_PDB"
-  fi
+
+       logger B "${FUNCNAME[0]}: Running DBCA for database $__db_msg"
+
+       # Additional messages for Data Guard:
+         if [ -n "$CONTAINER_NAME" ]; then logger x "${FUNCNAME[0]}:        Container name is: $CONTAINER_NAME"; fi
+         if [ -n "$ROLE" ];           then logger x "${FUNCNAME[0]}:        Container role is: $ROLE";           fi
+         if [ -n "$DG_TARGET" ];      then logger x "${FUNCNAME[0]}:   Container DG Target is: $DG_TARGET";      fi
+
+         if [ "$SID_NUM" -eq 1 ]
+       then # Start the listener in this home
+            "$ORACLE_HOME"/bin/lsnrctl start
+            unset __pdb_only
+            SIDENV="export ORACLE_SID=$ORACLE_SID"
+       fi
+       addTNSEntry "$ORACLE_SID"
+       SID_NUM=$((SID_NUM+1))
+       IFS=,
+
+         if [ "$__version" != "11" ] && [ -n "$PDB_LIST" ]
+       then OLDIFS=$IFS
+            IFS=,
+            PDB_NUM=1
+            PDB_ADMIN=PDBADMIN
+             for ORACLE_PDB in $PDB_LIST
+              do
+                 IFS=$OLDIFS
+                   if [ "$PDB_NUM" -eq 1 ]
+                 then # Create the database and the first PDB
+                      logger A "${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $ORACLE_PDB"
+                      createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
+                      PDBENV="export ORACLE_PDB=$ORACLE_PDB"
+                 else # Create additional PDB
+                      logger A "${FUNCNAME[0]}: Creating pluggable database $ORACLE_PDB"
+                      createDatabase NONE NONE TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
+                 fi
+                 addTNSEntry "$ORACLE_PDB"
+                 PDB_NUM=$((PDB_NUM+1))
+                 IFS=,
+            done
+            IFS=$OLDIFS
+            alterPluggableDB
+       elif [ "$__version" != "11" ] && [ "$__pdb_count" -gt 0 ]
+       then PDB_ADMIN=PDBADMIN
+            logger A "${FUNCNAME[0]}: Creating container database $__db_msg and $__pdb_count pluggable database(s) with name $ORACLE_PDB"
+            createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE "$__pdb_count" "$ORACLE_PDB" "$PDB_ADMIN"
+              if [ "$__pdb_count" -eq 1 ]
+            then PDBENV="export ORACLE_PDB=$ORACLE_PDB"
+                 addTNSEntry "$ORACLE_PDB"
+            else PDBENV="export ORACLE_PDB=${ORACLE_PDB}1"
+                  for ((PDB_NUM=1; PDB_NUM<=__pdb_count; PDB_NUM++))
+                   do addTNSEntry "${ORACLE_PDB}""${PDB_NUM}"
+                 done
+            fi
+            alterPluggableDB
+       else logger A "${FUNCNAME[0]}: Creating database $__db_msg"
+            createDatabase "$__dbcaresponse" "$INIT_PARAMS" FALSE
+            PDBENV="unset ORACLE_PDB"
+       fi
+
+  done
+  IFS=$OLDIFS
+
   logger BA "${FUNCNAME[0]}: DBCA complete"
 }
 
@@ -598,9 +611,13 @@ createDatabase() {
                    PDB_NAME \
                    PDB_ADMIN \
                    INIT_PARAMS
-         do replaceVars "$RESPONSEFILE" "$var"
-            #sed -i -e "s|###${var}###|$(eval echo \$$(echo $var))|g" "$RESPONSEFILE"
+         do REPIFS=$IFS
+            IFS=
+            replaceVars "$RESPONSEFILE" "$var"
        done
+       IFS=$REPIFS
+#         do replaceVars "$RESPONSEFILE" "$var"
+#       done
 
        # If there is greater than 8 CPUs default back to dbca memory calculations
        # dbca will automatically pick 40% of available memory for Oracle DB
