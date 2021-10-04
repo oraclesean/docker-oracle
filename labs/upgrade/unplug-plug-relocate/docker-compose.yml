@@ -1,0 +1,57 @@
+version: '3'
+services:
+  UPG-ORA12:
+    image: oraclesean/db:12.1-ee
+    container_name: UPG-ORA12
+    volumes:
+      - UPG-ORA12:/u01/app/oracle/oradata
+      - /home/lab/docker/labs/upgrade:/upgrade
+    environment:
+      CONTAINER_NAME: UPG-ORA12
+      ORACLE_SID: ORA12
+      DB_UNQNAME: ORA12
+      ORACLE_PWD: oracle
+      PDB_COUNT: 0
+      ORACLE_PDB: 
+
+    ports:
+      - 10010:1521
+
+  UPG-CDB12:
+    image: oraclesean/db:12.1-ee
+    container_name: UPG-CDB12
+    volumes:
+      - UPG-CDB12:/u01/app/oracle/oradata
+      - /home/lab/docker/labs/upgrade:/upgrade
+    environment:
+      CONTAINER_NAME: UPG-CDB12
+      ORACLE_SID: CDB12
+      DB_UNQNAME: CDB12
+      ORACLE_PWD: oracle
+      PDB_COUNT: 3
+      PDB_LIST: PDB1,PDB2,PDB3
+
+    ports:
+      - 10011:1521
+
+  UPG-CDB19:
+    image: oraclesean/db:19.11-ee
+    container_name: UPG-CDB19
+    volumes:
+      - UPG-CDB19:/u01/app/oracle/oradata
+      - /home/lab/docker/labs/upgrade:/upgrade
+    environment:
+      CONTAINER_NAME: UPG-CDB19
+      ORACLE_SID: CDB19
+      DB_UNQNAME: CDB19
+      ORACLE_PWD: oracle
+      PDB_COUNT: 1
+      ORACLE_PDB: PDB19
+
+    ports:
+      - 10012:1521
+
+volumes:
+  UPG-ORA12:
+  UPG-CDB12:
+  UPG-CDB19:
