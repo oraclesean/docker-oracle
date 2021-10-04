@@ -7,10 +7,10 @@
 /docker-images
 /docker-oracle
 /upgrade/*.jar
-/farsync/srdc*
-/farsync/tnsnames.ora
-/farsync/listener.ora
-/farsync/*.sql
-/farsync/*.dgs
-/farsync/*.rman
+/labs/farsync/srdc*
+/labs/farsync/tnsnames.ora
+/labs/farsync/listener.ora
+/labs/farsync/*.sql
+/labs/farsync/*.dgs
+/labs/farsync/*.rman
 Dockerfile.Upgrade
