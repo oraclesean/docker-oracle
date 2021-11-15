@@ -10,7 +10,9 @@ FROM oraclelinux:7-slim as base
 
 # Database defaults
 ARG ORACLE_BASE=/u01/app/oracle
-ARG ORACLE_HOME=/u01/app/oracle/product/19c/dbhome_1
+ARG ORACLE_BASE_HOME=$ORACLE_BASE/homes
+ARG ORACLE_BASE_CONFIG=$ORACLE_BASE/dbs
+ARG ORACLE_HOME=$ORACLE_BASE/product/19c/dbhome_1
 ARG ORACLE_INV=/u01/app/oraInventory
 ARG ORADATA=$ORACLE_BASE/oradata
 ARG ORACLE_VERSION=19.11
@@ -43,7 +45,7 @@ LABEL org.label-schema.url="http://oraclesean.com"
 LABEL org.label-schema.version="$BUILD_VERSION"
 LABEL org.label-schema.build-date="$BUILD_DATE"
 LABEL org.label-schema.vcs-url="https://github.com/oraclesean"
-LABEL org.label-schema.name="oraclesean/oracledb-$ORACLE_VERSION-$ORACLE_EDITION"
+LABEL org.label-schema.name="oraclesean/oracledb-$ORACLE_VERSION-${ORACLE_EDITION,,}"
 LABEL org.label-schema.description="Extensible Oracle $ORACLE_VERSION database"
 LABEL org.label-schema.docker.cmd="docker run -d --name <CONTAINER_NAME> -e PDB_COUNT=<PDB COUNT> -e ORACLE_SID=<ORACLE SID> -e ORACLE_PDB=<PDB PREFIX> <IMAGE NAME>"
 LABEL maintainer="Sean Scott <sean.scott@viscosityna.com>"
@@ -65,6 +67,8 @@ LABEL database.default.pdb_count="$PDB_COUNT"
 
 # Environment settings
 ENV ORACLE_BASE=$ORACLE_BASE \
+    ORACLE_BASE_HOME=$ORACLE_BASE_HOME \
+    ORACLE_BASE_CONFIG=$ORACLE_BASE_CONFIG \
     ORACLE_HOME=$ORACLE_HOME \
     ORACLE_INV=$ORACLE_INV \
     ORADATA=$ORADATA \
