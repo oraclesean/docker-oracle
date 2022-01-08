@@ -554,7 +554,7 @@ runDBCA() {
                  then # Create the database and the first PDB
                       logger A "${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $ORACLE_PDB"
                       createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
-                      PDBENV="export ORACLE_PDB=$ORACLE_PDB"
+                      printf "\nORACLE_PDB=$ORACLE_PDB\n" >> $HOME/.bashrc
                  else # Create additional PDB
                       logger A "${FUNCNAME[0]}: Creating pluggable database $ORACLE_PDB"
                       createDatabase NONE NONE TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
@@ -570,9 +570,9 @@ runDBCA() {
             logger A "${FUNCNAME[0]}: Creating container database $__db_msg and $__pdb_count pluggable database(s) with name $ORACLE_PDB"
             createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE "$__pdb_count" "$ORACLE_PDB" "$PDB_ADMIN"
               if [ "$__pdb_count" -eq 1 ]
-            then PDBENV="export ORACLE_PDB=$ORACLE_PDB"
+            then printf "\nORACLE_PDB=$ORACLE_PDB\n" >> $HOME/.bashrc
                  addTNSEntry "$ORACLE_PDB"
-            else PDBENV="export ORACLE_PDB=${ORACLE_PDB}1"
+            else printf "\nORACLE_PDB=${ORACLE_PDB}1\n" >> $HOME/.bashrc
                   for ((PDB_NUM=1; PDB_NUM<=__pdb_count; PDB_NUM++))
                    do addTNSEntry "${ORACLE_PDB}""${PDB_NUM}"
                  done
@@ -580,7 +580,7 @@ runDBCA() {
             alterPluggableDB
        else logger A "${FUNCNAME[0]}: Creating database $__db_msg"
             createDatabase "$__dbcaresponse" "$INIT_PARAMS" FALSE
-            PDBENV="unset ORACLE_PDB"
+            printf "\nunset ORACLE_PDB\n" >> $HOME/.bashrc
        fi
 
   done
@@ -884,11 +884,16 @@ then # No PDB name + no PDB count + no PDB list = Not a container DB
      unset ORACLE_PDB
      unset PDB_COUNT
      unset PDB_LIST
+elif [ ! -z "$PDB_LIST" ]
+then # PDB list is defined
+     export ORACLE_PDB=$(echo $PDB_LIST | cut -d, -f1)
 elif [ -z "$ORACLE_PDB" ] && [ "$__pdb_count" -gt 0 ]
 then # No PDB name but PDB count > 0
-     export ORACLE_PDB=ORCLPDB
-else export ORACLE_SID=$__oracle_sid
-     export ORACLE_PDB=$ORACLE_PDB
+     export ORACLE_PDB=ORCLPDB1
+elif [ "$__pdb_count" -gt 0 ]
+then # PDB name is set and count > 0
+     export ORACLE_PDB=${ORACLE_PDB}1
+else export ORACLE_PDB=$ORACLE_PDB
 fi
 
 # Check the audit path
@@ -952,7 +957,6 @@ export ORACLE_PATH=${ORACLE_PATH}
 
 export ORACLE_SID=${ORACLE_SID}
 #export ORACLE_SID=${ORACLE_SID^^}
-${PDBENV}
 EOF
 
        if [ "$(rlwrap -v)" ]
@@ -979,6 +983,7 @@ EOF
 
      moveFiles
      runUserScripts "$ORACLE_BASE"/scripts/setup
+
 fi
 
 # Check database status
