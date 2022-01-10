@@ -96,5 +96,34 @@ Create a container database with a default SID and three PDB named mypdb[1,2,3]:
 `docker run -d -e PDB_COUNT=3 -e ORACLE_PDB=mypdb IMG_NAME`  
 Create a container database with custom SID and named PDB:  
 `docker run -d -e ORACLE_SID=mydb -e PDB_LIST="test,dev,prod" IMG_NAME`
+# Errata
+## ORACLE_PDB Behavior in Containers
+There are multiple mechanisms that set the ORACLE_PDB variable in a container. It is set explicitly by passing a value (e.g. `-e ORACLE_PDB=value`) during `docker run`. This is the preferred way of doing things since it correctly sets the environment.
+The value may be set implicitly four ways:
+- If ORACLE_PDB is not set and the database version requires a PDB (20c and later), the value of ORACLE_PDB is inherited from the image.
+- If ORACLE_PDB is not set and PDB_COUNT is non-zero, PDB_COUNT PDBs are implied. The value of ORACLE_PDB is inherited from the image.
+- If both ORACLE_PDB and PDB_COUNT are set, ORACLE_PDB is assumed to be a prefix. PDB_COUNT pluggable databases are created as ${ORACLE_PDB}1 through ${ORACLE_PDB}${PDB_COUNT}. ORACLE_PDB in this case is not an actual pluggable database but a prefix.
+- If ORACLE_PDB is not set and PDB_LIST contains one or more values, ORACLE_PDB is inherited from the image.
+In each case the ORACLE_PDB environment variable is added to the `oracle` user's login scripts. Run that request more than one PDB (PDB_LIST, PDB_COUNT > 1) set the default value to the first PDB in the list/${ORACLE_PDB}1.
+In these latter cases, the ORACLE_PDB for interactive sessions is set by login but non-interactive sessions *DO NOT* get the local value. They inherit the value from the container's native environment.
+Take the following examples:
+- `docker run ... -e ORACLE_PDB=PDB ...`: The interactive and non-interactive values of ORACLE_PDB match.
+- 'docker run ... -e PDB_COUNT=n ...`: The interactive value of ORACLE_PDB is ORCLPDB1. The non-interactive value is ORCLPDB. This happens because the inherited value, ORCLPDB is used for non-interactive sessions.
+- `docker run ... -e PDB_LIST=PDB1,MYPDB ...`: The interactive value of ORACLE_PDB is PDB1. The non-interactive value is ORCLPDB (see above).
+- `docker run ... ` a 21c database: The interactive value of ORACLE_PDB is set in the DBCA scripts as ORCLPDB. The non-interactive value equals whatever is set in the Dockerfile. 
+This can cause confusion when calling scripts. For example:
+```
+docker exec -it CON_NAME bash
+env | grep ORACLE_PDB
+exit
+```
+...will show the correct, expected value. However:
+```
+docker exec -it CON_NAME bash -c "env | grep ORACLE_PDB"
+```
+...may show a different value. This is expected (and intended and desirable—it's necessary for statelessness and idempotency) but may lead to confusion.
+I recommend handling this as follows:
+- Set ORACLE_PDB explicitly in `docker run` even when using PDB_LIST. PDB_LIST is evaluated first so setting ORACLE_PDB sets the environment and PDB_LIST creates multiple pluggable databases. The default PDB should be first in the list and match ORACLE_PDB.
+- If you need multiple PDBs, use PDB_LIST instead of PDB_COUNT, and set ORACLE_PDB to the "default" PDB. Otherwise, the ORACLE_PDB value in non-interactive shells is the prefix and not a full/valid PDB name.
 # TODO
 - Remove sudo option for building containers. It's only used during software installation and isn't required in final images.
