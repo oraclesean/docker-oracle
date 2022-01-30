@@ -176,11 +176,13 @@ setBase() {
                        export ORACLE_BASE_HOME="$ORACLE_HOME" ;;
   esac
 }
+
 installOracle() {
   set -e
 
   # Default the version and home, use local values to allow multi-home installations
   local __version=${1:-$ORACLE_VERSION}
+  local __major_version=$(echo $__version | cut -d. -f1)
   local __oracle_home=${2:-$ORACLE_HOME}
 
     if [ -z "$ORACLE_EDITION" ]
@@ -230,6 +232,13 @@ installOracle() {
        yum -y localinstall $ORACLE_RPM
 
        # Determine the name of the init file used for RPM installation
+#         if [ "$__version" == "11.2.0.2" ] && [ "$ORACLE_EDITION" != "XE" ]
+#       then INIT_FILE="oracle-xe"
+#       elif [ "$__version" == "18.4" ]     && [ "$ORACLE_EDITION" != "XE" ]
+#       then INIT_FILE="oracle-xe-18c"
+#       else INIT_FILE="oracledb_ORCLCDB-${__major_version}c"
+#       fi
+
          if [ -z "$INIT_FILE" ]
        then INIT_FILE=$(find /etc/init.d/* -maxdepth 1 -type f -regex '.*/oracle[db_|-xe].*')
        else INIT_FILE=/etc/init.d/"$INIT_FILE"
@@ -330,27 +339,40 @@ installOracle() {
   fi
 
   # Check for OPatch
-    if [ "$(find "$INSTALL_DIR" -type f -name "p6880880*.zip" 2>/dev/null)" ]
-  then sudo su - oracle -c "unzip -oq -d $__oracle_home $INSTALL_DIR/p6880880*.zip" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)"
+#    if [ "$(find "$INSTALL_DIR" -type f -name "p6880880*.zip" 2>/dev/null)" ]
+#  then sudo su - oracle -c "unzip -oq -d $__oracle_home $INSTALL_DIR/p6880880*.zip" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)"
+    if [ "$(find "$INSTALL_DIR"/patches -type f -name "p6880880*.zip" 2>/dev/null)" ]
+  then sudo su - oracle -c "unzip -oq -d $__oracle_home $INSTALL_DIR/patches/p6880880*.zip" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)"
   fi
 
   # Check for patches
-    if [ -d "$INSTALL_DIR/patches" ] 
+    if [ -d "$INSTALL_DIR/patches" ] && [ -f "$INSTALL_DIR/manifest" ]
   then
-        for patchdir in $(find "$INSTALL_DIR"/patches/* -type d -regex '.*\/[:digit:].+$' | sed "s|/$||" | sort -n) # | grep -E "[0-9]{3}/" | sed "s|/$||" | sort -n)
-         do cd "$patchdir"
-              if [ "$(find . -type f -name "*.zip")" ]
-            then unzip -q ./*.zip
-                 chown -R oracle:oinstall .
-                 cd ./*/
+#        for patchdir in $(find "$INSTALL_DIR"/patches/* -type d -regex '.*\/[:digit:].+$' | sed "s|/$||" | sort -n) # | grep -E "[0-9]{3}/" | sed "s|/$||" | sort -n)
+#         do cd "$patchdir"
+       while read -r patchid patch
+          do
+               if [ -f "$(find "$INSTALL_DIR"/patches/"$patch")" ]
+             then sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/$patch"
                  # Get the apply command from the README
-                 opatch_apply=$(grep -E "opatch .apply" README.* | sort | head -1 | awk '{print $2}')
+                 opatch_apply=$(grep -E "opatch .apply" "$INSTALL_DIR"/"$patchid"/README.* | sort | head -1 | awk '{print $2}')
                  opatch_apply=${opatch_apply:-apply}
-                 patchdir=$(pwd)
                  # Apply the patch
-                 sudo su - oracle -c "$__oracle_home/OPatch/opatch $opatch_apply -silent $patchdir" || error "OPatch $opatch_apply for $patchdir failed"
-            fi
-       done
+                 sudo su - oracle -c "$__oracle_home/OPatch/opatch $opatch_apply -silent $INSTALL_DIR/$patchid" || error "OPatch $opatch_apply for $patchid failed"
+#              if [ "$(find . -type f -name "*.zip")" ]
+#            then unzip -q ./*.zip
+#                 chown -R oracle:oinstall .
+#                 cd ./*/
+#                 # Get the apply command from the README
+#                 opatch_apply=$(grep -E "opatch .apply" README.* | sort | head -1 | awk '{print $2}')
+#                 opatch_apply=${opatch_apply:-apply}
+#                 patchdir=$(pwd)
+#                 # Apply the patch
+#                 sudo su - oracle -c "$__oracle_home/OPatch/opatch $opatch_apply -silent $patchdir" || error "OPatch $opatch_apply for $patchdir failed"
+#            fi
+#       done
+          fi || error "Patch $patchid identified in manifest not found"
+        done < "$INSTALL_DIR"/manifest
   fi
 
   # Minimize the installation
@@ -505,6 +527,16 @@ runDBCA() {
   then error "Invalid value provided for INIT_PARAMS: $INIT_PARAMS"
   fi
 
+  # 21c database check - PDB is mandatory and Read-Only Home is the default
+    if [ "$__version" == "21" ]
+  then # Version 21; check PDB_LIST and ORACLE_PDB and assign a default if not set:
+         if [ -z "$PDB_LIST" ] && [ -z "$ORACLE_PDB" ]
+       then ORACLE_PDB=${ORACLE_PDB:-ORCLPDB}
+       fi
+       # Set PDB_COUNT to 1 if undefined:
+       PDB_COUNT=${PDB_COUNT:-1}
+  fi
+
   SID_LIST=${SID_LIST:-$ORACLE_SID}
   OLDIFS=$IFS
   IFS=,
@@ -543,7 +575,8 @@ runDBCA() {
        IFS=,
 
          if [ "$__version" != "11" ] && [ -n "$PDB_LIST" ]
-       then OLDIFS=$IFS
+       then # Not an 11g database, PDB list is defined:
+            OLDIFS=$IFS
             IFS=,
             PDB_NUM=1
             PDB_ADMIN=PDBADMIN
@@ -554,7 +587,7 @@ runDBCA() {
                  then # Create the database and the first PDB
                       logger A "${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $ORACLE_PDB"
                       createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
-                      printf "\nORACLE_PDB=$ORACLE_PDB\n" >> $HOME/.bashrc
+                      printf "\nexport ORACLE_PDB=$ORACLE_PDB\n" >> $HOME/.bashrc
                  else # Create additional PDB
                       logger A "${FUNCNAME[0]}: Creating pluggable database $ORACLE_PDB"
                       createDatabase NONE NONE TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
@@ -566,19 +599,22 @@ runDBCA() {
             IFS=$OLDIFS
             alterPluggableDB
        elif [ "$__version" != "11" ] && [ "$__pdb_count" -gt 0 ]
-       then PDB_ADMIN=PDBADMIN
+       then # Not an 11g database; PDB_COUNT > 0:
+            PDB_ADMIN=PDBADMIN
+            ORACLE_PDB=${ORACLE_PDB:-ORCLPDB}
             logger A "${FUNCNAME[0]}: Creating container database $__db_msg and $__pdb_count pluggable database(s) with name $ORACLE_PDB"
             createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE "$__pdb_count" "$ORACLE_PDB" "$PDB_ADMIN"
               if [ "$__pdb_count" -eq 1 ]
-            then printf "\nORACLE_PDB=$ORACLE_PDB\n" >> $HOME/.bashrc
+            then printf "\nexport ORACLE_PDB=$ORACLE_PDB\n" >> $HOME/.bashrc
                  addTNSEntry "$ORACLE_PDB"
-            else printf "\nORACLE_PDB=${ORACLE_PDB}1\n" >> $HOME/.bashrc
+            else printf "\nexport ORACLE_PDB=${ORACLE_PDB}1\n" >> $HOME/.bashrc
                   for ((PDB_NUM=1; PDB_NUM<=__pdb_count; PDB_NUM++))
                    do addTNSEntry "${ORACLE_PDB}""${PDB_NUM}"
                  done
             fi
             alterPluggableDB
-       else logger A "${FUNCNAME[0]}: Creating database $__db_msg"
+       else # 11g database OR PDB_COUNT is not set; create a non-container database:
+            logger A "${FUNCNAME[0]}: Creating database $__db_msg"
             createDatabase "$__dbcaresponse" "$INIT_PARAMS" FALSE
             printf "\nunset ORACLE_PDB\n" >> $HOME/.bashrc
        fi
@@ -881,7 +917,7 @@ then error "The SID must be alphanumeric"
 elif [ -z "$ORACLE_PDB" ] && [ "$__pdb_count" -eq 0 ] && [ -z "$PDB_LIST" ]
 then # No PDB name + no PDB count + no PDB list = Not a container DB
      export ORACLE_SID=${__oracle_sid:-ORCL}
-     unset ORACLE_PDB
+#     unset ORACLE_PDB
      unset PDB_COUNT
      unset PDB_LIST
 elif [ ! -z "$PDB_LIST" ]

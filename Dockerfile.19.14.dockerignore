@@ -1,15 +1,14 @@
 # Ignore all directories
 **
 # Include version directory
-!19.11
+!19.14
 # Include database and patch files
 !/database/LINUX.X64_193000_db_home.zip
 !/database/oracle-database-ee-19c-1.0-1.x86_64.rpm
 !/database/patches/p6880880_190000_Linux-x86-64.zip
-!/database/patches/p32545013_190000_Linux-x86-64.zip
+!/database/patches/p33515361_190000_Linux-x86-64.zip
 # Ignore files
 Dockerfile*
 .docker*
 .git*
 README.md
-!manageOracle.sh

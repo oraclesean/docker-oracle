@@ -1,3 +1,13 @@
-Dockerfile*
-/1?.?
+# Ignore all directories
+**
+# Include version directory
 !12.2
+# Include database and patch files
+!/database/linuxx64_12201_database.zip
+!/database/patches/p6880880_190000_Linux-x86-64.zip
+# Ignore files
+Dockerfile*
+.docker*
+.git*
+README.md
+!manageOracle.sh

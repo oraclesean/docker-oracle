@@ -1,6 +1,3 @@
-FROM oraclelinux:7-db
-MAINTAINER Sean Scott <sean.scott@viscosityna.com>
-
 #----------------------------------------------------------#
 #                                                          #
 #                Oracle Database Dockerfile                #
@@ -13,22 +10,25 @@ FROM oraclelinux:7-slim as base
 
 # Database defaults
 ARG ORACLE_BASE=/u01/app/oracle
-ARG ORACLE_HOME=/u01/app/oracle/product/12.1.0.2/dbhome_1
-ARG TARGET_HOME=/u01/app/oracle/product/19c/dbhome_1
+ARG ORACLE_BASE_HOME=$ORACLE_BASE/homes
+ARG ORACLE_BASE_CONFIG=$ORACLE_BASE/dbs
+ARG ORACLE_HOME=$ORACLE_BASE/product/21c/dbhome_1
 ARG ORACLE_INV=/u01/app/oraInventory
 ARG ORADATA=$ORACLE_BASE/oradata
-ARG ORACLE_VERSION=12.1
+ARG ORACLE_VERSION=21.3
 ARG ORACLE_EDITION=EE
 ARG ORACLE_SID=ORCLCDB
-ARG ORACLE_PDB=ORCLPDB
+ARG ORACLE_PDB=
 ARG PDB_COUNT=1
+# Set ROOH to ENABLE to use a Read Only Oracle Home
+ARG ROOH=
 
 # Directory defaults
 ARG SCRIPTS_DIR=/opt/scripts
-ARG SQLPATH=/home/oracle
+ARG ORACLE_PATH=/home/oracle
 
 # Build defaults
-ARG RPM_LIST="oracle-epel-release-el7 file-5.11 git less strace sudo tree vi which"
+ARG RPM_LIST="oracle-epel-release-el7 file-5.11 git less strace sudo tree vi which bash-completion"
 ARG RPM_SUPPLEMENT="rlwrap"
 ARG MIN_SPACE_GB=12
 ARG BUILD_DATE=
@@ -38,10 +38,6 @@ ARG DEBUG=
 
 # DB configuration defaults
 ARG MANAGE_ORACLE=manageOracle.sh
-
-# Source and Target home defaults
-ARG SOURCE_IMAGE=
-ARG TARGET_IMAGE=
 
 # Labels
 LABEL org.label-schema.schema-version="1.0"
@@ -61,7 +57,7 @@ LABEL volume.oraclehome="$ORACLE_HOME"
 LABEL volume.data="$ORADATA"
 LABEL volume.scripts="$SCRIPTS_DIR"
 LABEL volume.scripts.manage="$MANAGE_ORACLE"
-LABEL volume.sqlpath="$SQLPATH"
+LABEL volume.sqlpath="$ORACLE_PATH"
 LABEL port.listener.listener1="1521"
 LABEL port.oemexpress="5500"
 LABEL port.http="8080"
@@ -71,8 +67,9 @@ LABEL database.default.pdb_count="$PDB_COUNT"
 
 # Environment settings
 ENV ORACLE_BASE=$ORACLE_BASE \
+    ORACLE_BASE_HOME=$ORACLE_BASE_HOME \
+    ORACLE_BASE_CONFIG=$ORACLE_BASE_CONFIG \
     ORACLE_HOME=$ORACLE_HOME \
-    TARGET_HOME=/u01/app/oracle/product/19c/dbhome_1 \
     ORACLE_INV=$ORACLE_INV \
     ORADATA=$ORADATA \
     ORACLE_VERSION=$ORACLE_VERSION \
@@ -80,7 +77,8 @@ ENV ORACLE_BASE=$ORACLE_BASE \
     ORACLE_SID=$ORACLE_SID \
     ORACLE_PDB=$ORACLE_PDB \
     PDB_COUNT=$PDB_COUNT \
-    SQLPATH=$SQLPATH \
+    ROOH=$ROOH \
+    ORACLE_PATH=$ORACLE_PATH \
     SCRIPTS_DIR=$SCRIPTS_DIR \
     MANAGE_ORACLE=$MANAGE_ORACLE \
     DEBUG=$DEBUG
@@ -99,26 +97,42 @@ RUN chmod ug+x $SCRIPTS_DIR/*.sh && \
 
 #----------------------------------------------------------#
 #                                                          #
-#                 Copy source, target Homes                #
+#           Database Software Installation Stage           #
 #                                                          #
 #----------------------------------------------------------#
+
+FROM base as db
+
+# DB installation defaults
+ARG INSTALL_DIR=/opt/install
+ARG INSTALL_RESPONSE=inst.rsp
+ARG INIT_FILE=oracledb_ORCLCDB-21c
+ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PATCH,PILOT,SQLD,SUP,UCP,TCP,ZIP"
+
+# Copy DB install files
+COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/ $INSTALL_DIR/
+COPY --chown=oracle:oinstall ./database/ $INSTALL_DIR/
+
+# Install DB software binaries
+RUN $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE -O
+
+#----------------------------------------------------------#
+#                                                          #
+#                 Create a Database Runtime                #
+#                                                          #
+#----------------------------------------------------------#
+
 FROM base
 
-# Source directories
-COPY --chown=oracle:oinstall --from=oraclesean/db:12.1-ee $ORACLE_INV  $ORACLE_INV
-COPY --chown=oracle:oinstall --from=oraclesean/db:12.1-ee $ORACLE_BASE $ORACLE_BASE
-COPY --chown=oracle:oinstall --from=oraclesean/db:12.1-ee $ORADATA     $ORADATA
-COPY --chown=oracle:oinstall --from=oraclesean/db:12.1-ee $SCRIPTS_DIR $SCRIPTS_DIR
-
-# Target OH
-COPY --chown=oracle:oinstall --from=oraclesean/db:19.9-ee $TARGET_HOME $TARGET_HOME
+USER oracle
+COPY --chown=oracle:oinstall --from=db $ORACLE_INV  $ORACLE_INV
+COPY --chown=oracle:oinstall --from=db $ORACLE_BASE $ORACLE_BASE
+COPY --chown=oracle:oinstall --from=db $ORADATA     $ORADATA
 
 USER root
-RUN $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE -R \
-    $TARGET_HOME/root.sh
+RUN $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE -R
 
 USER oracle
-RUN $TARGET_HOME/oui/bin/attachHome.sh
 WORKDIR /home/oracle
 
 VOLUME ["$ORADATA"]

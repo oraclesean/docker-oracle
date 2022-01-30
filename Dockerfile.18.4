@@ -105,6 +105,7 @@ ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PATCH,PILOT,SQLD,SUP,UCP,TCP,ZIP"
 
 # Copy DB install files
 COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/ $INSTALL_DIR/
+COPY --chown=oracle:oinstall ./database/ $INSTALL_DIR/
 
 # Install DB software binaries
 RUN $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE -O
