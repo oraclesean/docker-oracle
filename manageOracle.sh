@@ -108,6 +108,7 @@ getPreinstall() {
        12.2*)  pre="oracle-database-server-12cR2-preinstall" ;;
        18.*)   pre="oracle-database-preinstall-18c" ;;
        19.*)   pre="oracle-database-preinstall-19c" ;;
+       21.*)   pre="oracle-database-preinstall-21c" ;;
        *)      pre="oracle-database-preinstall-19c" ;;
   esac
 
