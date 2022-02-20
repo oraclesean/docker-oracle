@@ -1,0 +1,8 @@
+# Ignore all directories
+**
+# Ignore files
+Dockerfile*
+.docker*
+.git*
+README.md
+!manageOracle.sh

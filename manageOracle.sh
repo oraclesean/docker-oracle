@@ -103,16 +103,33 @@ checkDirectory() {
 getPreinstall() {
     # Set the default RPM by version:
   case $1 in
-       11.*)   pre="oracle-database-preinstall-19c" ;;
-       12.1*)  pre="oracle-rdbms-server-12cR1-preinstall tar" ;;
-       12.2*)  pre="oracle-database-server-12cR2-preinstall" ;;
-       18.*)   pre="oracle-database-preinstall-18c" ;;
-       19.*)   pre="oracle-database-preinstall-19c" ;;
-       21.*)   pre="oracle-database-preinstall-21c" ;;
-       *)      pre="oracle-database-preinstall-19c" ;;
+       11*)   pre="oracle-rdbms-server-11gR2-preinstall" ;;
+       12.1*) pre="oracle-rdbms-server-12cR1-preinstall tar" ;;
+       12.2*) pre="oracle-database-server-12cR2-preinstall" ;;
+       18*)   pre="oracle-database-preinstall-18c" ;;
+       19*)   pre="oracle-database-preinstall-19c" ;;
+       21*)   pre="oracle-database-preinstall-21c" ;;
+       *)     pre="oracle-database-preinstall-19c" ;;
   esac
 
   export RPM_LIST="openssl $pre $RPM_LIST" 
+}
+
+buildLinux() {
+  set -e
+
+  getPreinstall "$ORACLE_BASE_VERSION"
+
+  yum -y update
+  yum -y install $RPM_LIST
+  sync
+
+    if [ -n "$RPM_SUPPLEMENT" ]
+  then yum -y install $RPM_SUPPLEMENT
+  fi
+
+  echo oracle:oracle | chpasswd || error "Failure setting the oracle user password."
+  yum clean all
 }
 
 configENV() {
@@ -863,13 +880,16 @@ ORACLE_CHARACTERSET=${ORACLE_CHARACTERSET:-AL32UTF8}
 ORACLE_NLS_CHARACTERSET=${ORACLE_NLS_CHARACTERSET:-AL16UTF16}
 
 # If a parameter is passed to the script, run the associated action.
-while getopts ":ehOPRU" opt; do
+while getopts ":ehiOPRU" opt; do
       case ${opt} in
            h) # Check health of the database
               HealthCheck || exit 1
               exit 0 ;;
            e) # Configure environment
               configENV
+              exit 0 ;;
+           i) # Build base images
+              buildLinux
               exit 0 ;;
            O) # Install Oracle
               installOracle "$ORACLE_VERSION" "$ORACLE_HOME"
