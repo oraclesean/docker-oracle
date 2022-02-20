@@ -12,12 +12,9 @@ then rpm_list="--build-arg RPM_LIST=$RPM_LIST"
 fi
 
 # Check whether Docker Build Kit is available; version must be 18.09 or greater.
-OLDIFS=$IFS
-IFS=.
-read -r major_version minor_version x <<<$(docker --version | awk '{print $3}')
-IFS=$OLDIFS
-major_version=$((10#$major_version))
-minor_version=$((10#$minor_version))
+version=$(docker --version | awk '{print $3}')
+major_version=$((10#$(echo $version | cut -d. -f1)))
+minor_version=$((10#$(echo $version | cut -d. -f2)))
 
   if [ "$major_version" -gt 18 ] || [ "$major_version" -eq 18 -a "$minor_version" -gt 9 ]
 then BUILDKIT=1
