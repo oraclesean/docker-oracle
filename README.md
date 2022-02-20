@@ -50,6 +50,16 @@ ${VERSION}
 - `DATABASE.zip` and/or `DATABASE.rpm`: Database installers. If an `.rpm` file is present, the RPM installation is used.
 - `p6880880_*.zip`: (Optional) OPatch file applied directly to `ORACLE_HOME`.
 - `patches/*`: (Optional) Subdirectories containing patch archives to be applied during database installation, one patch per subdirectory.
+## Base Linux Image Creation
+Instead of duplicating the time and effort spent building base images—that is, pulling a Linux image and adding database prerequisite packages—for each build, the `buildLinuxImage.sh` script takes the database version (11g, 12.1, 12.2, 18c, 19c, 21c) and applies the prerequisite package, along with any additional custom RPMs and tags the result as `REPOSITORY:TAG-ORACLE_VERSION`.
+Run the script as:
+```
+./buildLinuxImage.sh ORACLE_BASE_VERSION [TAG] [REPOSITORY]
+```
+Where:
+- `ORACLE_BASE_VERSION` is one of 11g, 12.1, 12.2, 18c, 19c, or 21c
+- `TAG` (optional) is the reposotiry tag. Defaults to `7-slim`
+- `REPOSITORY` (optional) is the name of the repository (Linux distro). Defaults to `oraclelinux`
 ## Flexible Image Creation
 Each Dockerfile uses a set of common ARG values. Defaults are set in each Dockerfile but can be overridden by passing `--build-arg` values to `docker build`. This allows a single Dockerfile to accommodate a wide range of build options without changes to any files, including:
 - Removing specific components (APEX, SQL Developer, help files, etc) to minimize image size without editing scripts. It's easier to build images to include components that are normally be deleted. This is particularly useful for building images for testing 19c upgrades. APEX is included in the seed database but older APEX schemas have to be removed prior to a 19c upgrade. Where's the removal script? In the APEX directory, among those commonly removed to trim image size!
