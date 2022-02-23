@@ -103,7 +103,7 @@ checkDirectory() {
 getPreinstall() {
     # Set the default RPM by version:
   case $1 in
-       11*)   pre="oracle-rdbms-server-11gR2-preinstall" ;;
+       11*)   pre="oracle-rdbms-server-11gR2-preinstall unzip" ;;
        12.1*) pre="oracle-rdbms-server-12cR1-preinstall tar" ;;
        12.2*) pre="oracle-database-server-12cR2-preinstall" ;;
        18*)   pre="oracle-database-preinstall-18c" ;;
