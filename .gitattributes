@@ -1,0 +1,7 @@
+*.sh eol=lf
+*.conf eol=lf
+*.rsp eol=lf
+manifest eol=lf
+Checksum.* eol=lf
+Dockerfile.* eol=lf
+Dockerfile.* linguist-language=Dockerfile
