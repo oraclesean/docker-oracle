@@ -913,11 +913,14 @@ trap _sigterm SIGTERM
 trap _sigkill SIGKILL
 
 # Check whether container has enough memory
-# Github issue #219: Prevent integer overflow,
-# only check if memory digits are less than 11 (single GB range and below)
-__mem=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+  if [ -f /sys/fs/cgroup/cgroup.controllers ]
+then __mem=$(cat /sys/fs/cgroup/memory.high)
+else __mem=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+fi
 
-  if [ "${#__mem}" -lt 11 ] && [ "$__mem" -lt 2147483648 ]
+  if [ -z "$__mem" ]
+then error "There was a problem getting the cgroups memory limit on the system"
+elif [ "${#__mem}" -lt 11 ] && [ "$__mem" -lt 2147483648 ]
 then error "The database container requires at least 2GB of memory; only $__mem is available"
 fi
 
