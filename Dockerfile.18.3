@@ -38,6 +38,7 @@ ARG DEBUG=
 
 # DB configuration defaults
 ARG MANAGE_ORACLE=manageOracle.sh
+ARG ATTACH_HOME=0
 
 # Labels
 LABEL org.label-schema.schema-version="1.0"
@@ -81,6 +82,7 @@ ENV ORACLE_BASE=$ORACLE_BASE \
     ORACLE_PATH=$ORACLE_PATH \
     SCRIPTS_DIR=$SCRIPTS_DIR \
     MANAGE_ORACLE=$MANAGE_ORACLE \
+    ATTACH_HOME=$ATTACH_HOME \
     DEBUG=$DEBUG
 
 ENV PATH=$ORACLE_HOME/bin:$ORACLE_HOME/OPatch/:/usr/sbin:$PATH \
@@ -111,7 +113,7 @@ ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PATCH,PILOT,SQLD,SUP,UCP,TCP,ZIP"
 
 # Copy DB install files
 COPY --chown=oracle:oinstall ./$ORACLE_VERSION/install/ $INSTALL_DIR/
-COPY --chown=oracle:oinstall ./database/ $INSTALL_DIR/
+COPY --chown=oracle:oinstall ./database/* $INSTALL_DIR/
 
 # Install DB software binaries
 RUN $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE -O
