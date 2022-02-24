@@ -1,11 +1,9 @@
 # Ignore all directories
 **
 # Include version directory
-!18.3
+!18.4
 # Include database and patch files
-#!/database/LINUX.X64_180000_db_home.zip
-#!/database/oracle-database-ee-18c-1.0-1.x86_64.rpm
-#!/database/patches/p6880880_190000_Linux-x86-64.zip
+# NA
 # Ignore files
 Dockerfile*
 .docker*
