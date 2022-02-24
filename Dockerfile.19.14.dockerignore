@@ -12,3 +12,4 @@ Dockerfile*
 .docker*
 .git*
 README.md
+!manageOracle.sh
