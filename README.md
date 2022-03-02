@@ -67,8 +67,8 @@ Each Dockerfile uses a set of common ARG values. Defaults are set in each Docker
 - Some database versions may require special RPM. Rather than maintaining that in scripts, it's in the Dockerfile (configuration).
 - Add supplemental RPMs. Some RPM have dependencies (such as `rlwrap`) that require a second execution of `rpm install`. All builds treat this the same way.
   - The RPM list includes tools for interactive use of containers. 
-  - Remove git, less, strace, tree, vi, which, and bash-completion for non-interactive environments
-  - sudo is used to run installations from the manageOracle.sh script
+  - Remove `git`, `less`, `strace`, `tree`, `vi`, `which`, and `bash-completion` for non-interactive environments
+  - `sudo` is used to run installations from the `manageOracle.sh` script
 - All builds are multi-stage with identical steps, users and operations. Differences are handled by the management script by reading configuration information from the Dockerfile, discovered in the file structure, or set in the environment.
 - Customizing the directories for `ORACLE_BASE`, `ORACLE_HOME`, `oraInventory`, and the `oradata` directory.
 - Specify Read-Only Oracle Home (ROOH). Set `ROOH=ENABLE` in the Dockerfile, or pass `--build-arg ROOH=ENABLE` during build.
@@ -137,3 +137,16 @@ I recommend handling this as follows:
 - If you need multiple PDBs, use PDB_LIST instead of PDB_COUNT, and set ORACLE_PDB to the "default" PDB. Otherwise, the ORACLE_PDB value in non-interactive shells is the prefix and not a full/valid PDB name.
 # TODO
 - Remove sudo option for building containers. It's only used during software installation and isn't required in final images.
+# Glossary
+- APEX: Oracle Application Express, a low-code web development tool.
+- CDB: Container Database - Introduced in 12c, container databases introduce capacity and security enhancements. Each CDB consists of a root container plus one or more Pluggable Databases, or PDBs.
+- DBCA: Oracle Database Configuration Assistant - a tool for creating databases.
+- EE: Oracle Enterprise Edition - A licensed, more robust version of Oracle that can be extended through addition of add-ons like Advanced Compression, Partitioning, etc.
+- ORACLE_BASE: The base directory for Oracle software installation.
+- ORACLE_HOME: The directory path containing an Oracle database software installation.
+- ORACLE_INVENTORY, Oracle Inventory: Metadata of Oracle database installations on a host.
+- PDB: Pluggable Database - One or more PDBs "plug in" to a container database.
+- RPM: RedHat Package Manager - package files for installing software on Linux.
+- runInstall: Performs Oracle database software installation.
+- SE, SE2: Oracle Standard Edition/Oracle Standard Edition 2 - A licensed version of Oracle with limited features. Not all features are available, licensed, or extensive in SE/SE2. For example, partitioning is not available in SE/SE2, and RAC is limited to specific node/core counts.
+- XE: Oracle Express Edition - A limited version of the Oracle database that is free to use.
