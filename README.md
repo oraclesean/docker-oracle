@@ -1,3 +1,5 @@
+# Note
+I added major feature updates to this repository on March 3 2022; usage information below may be out-of-date. I will update this README with revised information shortly. SS
 # docker-oracle
 A repository of Docker image builds for creating Oracle databases. This repo replaces the other Docker repos I maintain. There were things I didn't like about the generally available build scripts that I wanted to improve on.
 ## Use ARG Over ENV
