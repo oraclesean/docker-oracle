@@ -1,20 +1,20 @@
 #!/bin/bash
-#----------------------------------------------------------#
-#                                                          #
-#               Oracle Container Management                #
-#                                                          #
-# This script is used to perform all management functions  #
-# for Oracle database containers. The default action is to #
-# build a database by running DBCA. Other options include: #
-#                                                          #
-#    healthcheck: Perform the Docker health check          #
-#                                                          #
-#                                                          #
-#                                                          #
-#                                                          #
-#                                                          #
-#----------------------------------------------------------#
-
+#---------------------------------------------------------------------#
+#                                                                     #
+#                     Oracle Container Management                     #
+#                                                                     #
+# This script is used to perform all management functions for Oracle  #
+# database containers. The default action starts a databas, running   #
+# DBCA if none exists. Other options include:                         #
+#                                                                     #
+#    -e: Configure the environment (deprecated)                       #
+#    -h: Perform the Docker health check                              #
+#    -O: Install Oracle database software                             #
+#    -p: List patches installed in the database                       #
+#    -P: Change privileged passwords                                  #
+#    -R: Perform post-software installation root actions              #
+#    -U: Install an addition home for upgrade images                  #
+#---------------------------------------------------------------------#
 ORACLE_CHARACTERSET=${ORACLE_CHARACTERSET:-AL32UTF8}
 ORACLE_NLS_CHARACTERSET=${ORACLE_NLS_CHARACTERSET:-AL16UTF16}
 
@@ -37,7 +37,6 @@ logger() {
   elif [[ $__format =~ a ]]
   then printf "\n"
   fi
-
 }
 
 warn() {
@@ -54,7 +53,7 @@ debug() {
   __s2=
     if [ "$debug" ]
   then __s1="DEBUG: $1"
-       __s2="${2//\n/}" #"$(echo $2 | sed 's/\n//g')"
+       __s2="${2//\n/}"
        printf "%-40s: %s\n" "$__s1" "$__s2" | tee -a "$3"
   fi
 }
@@ -115,23 +114,6 @@ getPreinstall() {
   export RPM_LIST="openssl $pre $RPM_LIST" 
 }
 
-buildLinux() {
-  set -e
-
-  getPreinstall "$ORACLE_BASE_VERSION"
-
-  yum -y update
-  yum -y install $RPM_LIST
-  sync
-
-    if [ -n "$RPM_SUPPLEMENT" ]
-  then yum -y install $RPM_SUPPLEMENT
-  fi
-
-  echo oracle:oracle | chpasswd || error "Failure setting the oracle user password."
-  yum clean all
-}
-
 configENV() {
   set -e
 
@@ -163,27 +145,18 @@ configENV() {
         18.*|19.*|21.*) if [ "${ROOH^^}" = "ENABLE" ]; then mkdir -p "$ORACLE_BASE"/{dbs,homes} || error "Failure creating directories."; fi
                         ;;
    esac
-  chown -R oracle:oinstall "$SCRIPTS_DIR" "$ORACLE_INV" "$ORACLE_BASE" "$ORADATA" "$__target_home"                            || error "Failure changing directory ownership."
-  ln -s "$ORACLE_BASE"/scripts /docker-entrypoint-initdb.d                                                                    || error "Failure setting Docker entrypoint."
-  echo oracle:oracle | chpasswd                                                                                               || error "Failure setting the oracle user password."
+  chown -R oracle:oinstall "$SCRIPTS_DIR" "$ORACLE_INV" "$ORACLE_BASE" "$ORADATA" "$__target_home" || error "Failure changing directory ownership."
+  ln -s "$ORACLE_BASE"/scripts /docker-entrypoint-initdb.d                                         || error "Failure setting Docker entrypoint."
+  echo oracle:oracle | chpasswd                                                                    || error "Failure setting the oracle user password."
   yum clean all
 }
 
 checkSum() {
-  # $1 is the file name containing the md5 hashes
-  # $2 is the extension to check
-  grep -E "${2}$" "$1" | while read checksum_value filename
-    do
-       # md5sum is present and values do not match
-         if [ "$(type md5sum 2>/dev/null)" ] && [ ! "$(md5sum "$INSTALL_DIR"/"$filename" | awk '{print $1}')" == "$checksum_value" ]
-       then error "Checksum for $filename did not match"
-       else # Unzip to the correct directory--ORACLE_HOME for 18c/19c, INSTALL_DIR for others
-            case $ORACLE_VERSION in
-                 18.*|19.*|21.*) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/$filename" ;;
-                              *) sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/$filename" ;;
-            esac
-       fi
-  done
+  # $1 is the file name
+  # $2 is the md5sum
+    if [ "$(type md5sum 2>/dev/null)" ] && [ ! "$(md5sum "$1" | awk '{print $1}')" == "$2" ]
+  then error "Checksum for $1 did not match"
+  fi
 }
 
 setBase() {
@@ -193,6 +166,35 @@ setBase() {
                     *) export ORACLE_BASE_CONFIG="$ORACLE_HOME/dbs"
                        export ORACLE_BASE_HOME="$ORACLE_HOME" ;;
   esac
+}
+
+installPatch() {
+  # $1 is the patch type (patch, opatch)
+  # $2 is the version
+    if [ -d "$INSTALL_DIR/patches" ] && [ -f "$manifest" ]
+  then manifest="$(find $INSTALL_DIR -maxdepth 1 -name "manifest*" 2>/dev/null)"
+       grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\b${1}\b[[:blank:]]*${2}" $manifest | awk '{print $5,$2}' | while read patchid install_file
+          do
+               if [ -f "$INSTALL_DIR/patches/$install_file" ]
+             then case $1 in
+                  opatch) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/patches/$install_file" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)" ;;
+                  patch)  sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/patches/$install_file" || error "There was a problem unzipping $install_file"
+                          # Get the apply command from the README
+                          opatch_apply=$(grep -E "opatch .apply.*" "$INSTALL_DIR"/"$patchid"/README.* | sort | head -1 | awk '{print $2}')
+                          opatch_apply=${opatch_apply:-apply}
+                          sudo su - oracle -c "$ORACLE_HOME/OPatch/opatch $opatch_apply -silent $INSTALL_DIR/$patchid" || error "OPatch $opatch_apply for $patchid failed"
+                          ;;
+                  esac
+             else error "Patch $patchid identified in manifest not found"
+             fi
+        done
+  else error "The manifest file was not found"
+  fi
+}
+
+getPatches() {
+  # Print a patch summary
+  $ORACLE_HOME/OPatch/opatch lspatches || logger BA "There was a problem running opatch lspatches"
 }
 
 installOracle() {
@@ -310,17 +312,19 @@ installOracle() {
 
   else # Install Oracle from archive
 
-       # Handle versions with edition-specific installers, which have multiple Checksum files (1 per edition)
-       case $(find "$INSTALL_DIR"/Checksum* 2>/dev/null | wc -l) in
-         0) unzip -q -d "$INSTALL_DIR" "$INSTALL_DIR"/"*.zip" ;;
-         1) checkSum "$INSTALL_DIR"/Checksum zip ;;
-         *) checkSum "$INSTALL_DIR"/Checksum."${ORACLE_EDITION}" zip ;;
-       esac
-
-       # Unset errors to prevent installer warnings from exiting
+       manifest="$(find $INSTALL_DIR -maxdepth 1 -name "manifest*" 2>/dev/null)"
+       # Some versions have multiple files that must be unzipped to the correct location prior to installation.
+       # Loop over the manifest, retrieve the file and checksum values, unzip the installation files.
        set +e
-       # Match the install command to the version
-       case $__version in       
+       grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\bdatabase\b.*${ORACLE_EDITION::2}" $manifest | awk '{print $1,$2}' | while read checksum install_file
+          do checkSum "$INSTALL_DIR/$install_file" "$checksum"
+             case $ORACLE_VERSION in
+                  18.*|19.*|21.*) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/$install_file" ;;
+                               *) sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/$install_file" ;;
+             esac
+       done
+       # Run the installation
+       case $ORACLE_VERSION in
             18.*|19.*|21.*) sudo su - oracle -c "$__oracle_home/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignorePrereqFailure" ;;
                          *) sudo su - oracle -c "$INSTALL_DIR/database/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignoresysprereqs -ignoreprereq" ;;
        esac
@@ -351,46 +355,20 @@ installOracle() {
 
             # Relink
             cd "$__oracle_home"/bin
-            sudo su - oracle -c "relink all" || echo "Relink failed!"; cat "$__oracle_home/install/relink.log"; exit 1
+            sudo su - oracle -c "relink all" || logger "$(cat $__oracle_home/install/relink.log)"; error "Relink failed"
        fi
 
-  fi
+echo "End of binary installation"
+
+  fi # End of software binary installation
 
   # Check for OPatch
-#    if [ "$(find "$INSTALL_DIR" -type f -name "p6880880*.zip" 2>/dev/null)" ]
-#  then sudo su - oracle -c "unzip -oq -d $__oracle_home $INSTALL_DIR/p6880880*.zip" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)"
-    if [ "$(find "$INSTALL_DIR"/patches -type f -name "p6880880*.zip" 2>/dev/null)" ]
-  then sudo su - oracle -c "unzip -oq -d $__oracle_home $INSTALL_DIR/patches/p6880880*.zip" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)"
-  fi
-
+  installPatch opatch "${ORACLE_VERSION::2}"
   # Check for patches
-    if [ -d "$INSTALL_DIR/patches" ] && [ -f "$INSTALL_DIR/manifest" ]
-  then
-#        for patchdir in $(find "$INSTALL_DIR"/patches/* -type d -regex '.*\/[:digit:].+$' | sed "s|/$||" | sort -n) # | grep -E "[0-9]{3}/" | sed "s|/$||" | sort -n)
-#         do cd "$patchdir"
-       while read -r patchid patch
-          do
-               if [ -f "$(find "$INSTALL_DIR"/patches/"$patch")" ]
-             then sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/$patch"
-                 # Get the apply command from the README
-                 opatch_apply=$(grep -E "opatch .apply" "$INSTALL_DIR"/"$patchid"/README.* | sort | head -1 | awk '{print $2}')
-                 opatch_apply=${opatch_apply:-apply}
-                 # Apply the patch
-                 sudo su - oracle -c "$__oracle_home/OPatch/opatch $opatch_apply -silent $INSTALL_DIR/$patchid" || error "OPatch $opatch_apply for $patchid failed"
-#              if [ "$(find . -type f -name "*.zip")" ]
-#            then unzip -q ./*.zip
-#                 chown -R oracle:oinstall .
-#                 cd ./*/
-#                 # Get the apply command from the README
-#                 opatch_apply=$(grep -E "opatch .apply" README.* | sort | head -1 | awk '{print $2}')
-#                 opatch_apply=${opatch_apply:-apply}
-#                 patchdir=$(pwd)
-#                 # Apply the patch
-#                 sudo su - oracle -c "$__oracle_home/OPatch/opatch $opatch_apply -silent $patchdir" || error "OPatch $opatch_apply for $patchdir failed"
-#            fi
-#       done
-          fi || error "Patch $patchid identified in manifest not found"
-        done < "$INSTALL_DIR"/manifest
+  installPatch patch "${ORACLE_VERSION}"
+  # Print a patch summary
+    if [ -n "$DEBUG" ]
+  then sudo su - oracle -c "$(getPatches)"
   fi
 
   # Minimize the installation
@@ -565,7 +543,7 @@ runDBCA() {
        local __dbcaresponse="$ORACLE_BASE"/dbca."$ORACLE_SID".rsp
        local __pdb_count=${PDB_COUNT:-0}  
        # Detect custom DBCA response files:
-       cp "$ORADATA"/dbca."$ORACLE_SID".rsp "$__dbcaresponse" 2>/dev/null || cp "$ORADATA"/dbca.rsp "$__dbcaresponse" 2>/dev/null || cp "$SCRIPTS_DIR"/dbca.rsp "$__dbcaresponse"
+       cp "$INSTALL_DIR"/dbca.*.rsp "$__dbcaresponse" 2>/dev/null || cp "$ORADATA"/dbca."$ORACLE_SID".rsp "$__dbcaresponse" 2>/dev/null || cp "$ORADATA"/dbca.rsp "$__dbcaresponse" 2>/dev/null
 
        # Allow DB unique names:
          if [ -n "$DB_UNQNAME" ] && [ "$DB_UNQNAME" != "$ORACLE_SID" ]
@@ -670,21 +648,16 @@ createDatabase() {
             replaceVars "$RESPONSEFILE" "$var"
        done
        IFS=$REPIFS
-#         do replaceVars "$RESPONSEFILE" "$var"
-#       done
 
-       # If there is greater than 8 CPUs default back to dbca memory calculations
-       # dbca will automatically pick 40% of available memory for Oracle DB
-       # The minimum of 2G is for small environments to guarantee that Oracle has enough memory to function
-       # However, bigger environment can and should use more of the available memory
-       # This is due to Github Issue #307
+       # If there are more than 8 CPUs default back to dbca memory calculations to pick 40%
+       # of available memory. The minimum of 2G is for small environments and guarantees
+       # Oracle has enough memory. Larger environments should use the available memory.
          if [ "$(nproc)" -gt 8 ]
        then sed -i -e 's|TOTALMEMORY = "2048"||g' "$RESPONSEFILE"
        fi
        "$ORACLE_HOME"/bin/dbca -silent -createDatabase -responseFile "$RESPONSEFILE" || cat "$dbcaLogDir"/"$DB_UNQNAME"/"$DB_UNQNAME".log || cat "$dbcaLogDir"/"$DB_UNQNAME".log || cat "$dbcaLogDir"/"$DB_UNQNAME"/"$PDB_NAME"/"$DB_UNQNAME".log
   else "$ORACLE_HOME"/bin/dbca -silent -createPluggableDatabase -pdbName "$PDB_NAME" -sourceDB "$ORACLE_SID" -createAsClone true -createPDBFrom DEFAULT -pdbAdminUserName "$PDB_ADMIN" -pdbAdminPassword "$ORACLE_PWD" || cat "$dbcaLogDir"/"$DB_UNQNAME"/"$DB_UNQNAME".log || cat "$dbcaLogDir"/"$DB_UNQNAME".log || cat "$dbcaLogDir"/"$DB_UNQNAME"/"$PDB_NAME"/"$DB_UNQNAME".log
   fi
-
 }
 
 moveFiles() {
@@ -772,16 +745,12 @@ HealthCheck() {
 
     if [ "$rc" -ne 0 ]
   then error "Failed to get the Oracle environment from oraenv"
-       exit 1
   elif [ -z "$ORACLE_SID" ]
   then error "ORACLE_SID is not set"
-       exit 1
   elif [ -z "$ORACLE_HOME" ]
   then error "ORACLE_HOME is not set"
-       exit 1
   elif [ ! -f "$ORACLE_HOME/bin/sqlplus" ]
   then error "Cannot locate $ORACLE_HOME/bin/sqlplus"
-       exit 1
   elif [ "$__pdb_count" -gt 0 ] || [ -n "$PDB_LIST" ]
   then __tabname="v\$pdbs"
   fi
@@ -819,8 +788,14 @@ EOF
 postInstallRoot() {
   # Run root scripts in final build stage
   logger BA "Running root scripts"
-  "$ORACLE_INV"/orainstRoot.sh
-  "$ORACLE_HOME"/root.sh
+    if [ -n "$ORACLE_INV" ] && [ -d "$ORACLE_INV" ] && [ -f "$ORACLE_INV/orainstRoot.sh" ]
+  then logger b "Running orainstRoot.sh script in $ORACLE_INV"
+       $ORACLE_INV/orainstRoot.sh || error "There was a problem running $ORACLE_INV/orainstRoot.sh"
+  fi
+    if [ -n "$ORACLE_HOME" ] && [ -d "$ORACLE_HOME" ] && [ -f "$ORACLE_HOME/root.sh" ]
+  then logger b "Running root.sh script in $ORACLE_HOME"
+       $ORACLE_HOME/root.sh || error "There was a problem running $ORACLE_HOME/root.sh"
+  fi
 
   # If this is an upgrade image, run the target root script and attach the new home.
     if [ -n "$TARGET_HOME" ] && [ -d "$TARGET_HOME" ] && [ -f "$TARGET_HOME/root.sh" ]
@@ -829,7 +804,6 @@ postInstallRoot() {
        logger BA "Attaching home for upgrade"
        sudo su - oracle -c "$TARGET_HOME/oui/bin/attachHome.sh"
   fi
-
   # Additional steps to be performed as root
 
   # VOLUME_GROUP permits non-oracle/oinstall ownership of bind-mounted volumes. VOLUME_GROUP is passed as GID:GROUP_NAME
@@ -880,7 +854,7 @@ ORACLE_CHARACTERSET=${ORACLE_CHARACTERSET:-AL32UTF8}
 ORACLE_NLS_CHARACTERSET=${ORACLE_NLS_CHARACTERSET:-AL16UTF16}
 
 # If a parameter is passed to the script, run the associated action.
-while getopts ":ehiOPRU" opt; do
+while getopts ":ehOpPRU" opt; do
       case ${opt} in
            h) # Check health of the database
               HealthCheck || exit 1
@@ -888,11 +862,11 @@ while getopts ":ehiOPRU" opt; do
            e) # Configure environment
               configENV
               exit 0 ;;
-           i) # Build base images
-              buildLinux
-              exit 0 ;;
            O) # Install Oracle
               installOracle "$ORACLE_VERSION" "$ORACLE_HOME"
+              exit 0 ;;
+           p) # List installed patches
+              getPatches
               exit 0 ;;
            P) # Change passwords
               # TODO: Get the password from the CLI
@@ -962,7 +936,7 @@ then mkdir -p "$ORACLE_BASE"/admin/"$ORACLE_SID"/adump
 fi
 
 # Check whether database already exists
-  if [ "$(grep -Ec "^$ORACLE_SID\:" /etc/oratab)" -eq 1 ] && [ -d "$ORADATA"/"${ORACLE_SID^^}" ] || [ -d "$ORADATA"/"${ORACLE_SID}" ]
+  if [ -f "/etc/oratab" ] && [ "$(grep -Ec "^$ORACLE_SID\:" /etc/oratab || echo 0)" -eq 1 ] && [ -d "$ORADATA"/"${ORACLE_SID^^}" ] || [ -d "$ORADATA"/"${ORACLE_SID}" ]
 then moveFiles
      startDB
 else # Create the TNS configuration
