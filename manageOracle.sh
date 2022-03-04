@@ -936,7 +936,7 @@ then mkdir -p "$ORACLE_BASE"/admin/"$ORACLE_SID"/adump
 fi
 
 # Check whether database already exists
-  if [ -f "/etc/oratab" ] && [ "$(grep -Ec "^$ORACLE_SID\:" /etc/oratab || echo 0)" -eq 1 ] && [ -d "$ORADATA"/"${ORACLE_SID^^}" ] || [ -d "$ORADATA"/"${ORACLE_SID}" ]
+  if [ -f "/etc/oratab" ] && [ "$(grep -Ec "^$ORACLE_SID\:" /etc/oratab)" -eq 1 ] && [ -d "$ORADATA"/"${ORACLE_SID^^}" ] || [ -d "$ORADATA"/"${ORACLE_SID}" ]
 then moveFiles
      startDB
 else # Create the TNS configuration
