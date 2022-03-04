@@ -235,8 +235,6 @@ FROM_OEL_BASE="$(getImage)"
 echo $FROM_OEL_BASE
 createDockerfiles db || error "There was a problem creating the Dockerfiles"
 processDockerfile $dockerfile
-echo $dockerfile
-cat $dockerfile
 
 # Add exceptions to the ignore file
   if [ "$ORACLE_BASE_VERSION" != "$ORACLE_VERSION" ]
