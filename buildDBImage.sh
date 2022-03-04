@@ -249,6 +249,6 @@ fi
 createIgnorefile $ORACLE_BASE_VERSION
 
 DOCKER_BUILDKIT=$BUILDKIT docker build --progress=plain $options $arguments \
-                         --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') --build-arg DEBUG="bash -xx" \
+                         --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                          -t oraclesean/db:${ORACLE_VERSION}-${ORACLE_EDITION} \
                          -f $dockerfile . && rm $dockerfile $dockerignore
