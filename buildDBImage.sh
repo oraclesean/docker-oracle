@@ -222,8 +222,6 @@ then # There is no base image
      createDockerfiles oraclelinux || error "There was a problem creating the Dockerfiles"
      processDockerfile $dockerfile
 
-     cat $dockerfile
-     cat $dockerignore
      # Run the build
      DOCKER_BUILDKIT=$BUILDKIT docker build --progress=plain $options $arguments $rpm_list \
                               --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
