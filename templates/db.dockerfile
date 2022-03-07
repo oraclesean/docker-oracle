@@ -17,12 +17,12 @@ COPY --chown=oracle:oinstall ./database/ $INSTALL_DIR
 # Install DB software binaries
 RUN chmod ug+x $SCRIPTS_DIR/$MANAGE_ORACLE && \
      bash -x $SCRIPTS_DIR/$MANAGE_ORACLE -O
-#    $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE -O
 
 FROM ###FROM_OEL_BASE###
 
 USER oracle
-COPY --chown=oracle:oinstall ./config/* $INSTALL_DIR/
+COPY --chown=oracle:oinstall           ./config/*   $INSTALL_DIR/
+COPY --chown=oracle:oinstall --from=db $SCRIPTS_DIR $SCRIPTS_DIR
 COPY --chown=oracle:oinstall --from=db $ORACLE_INV  $ORACLE_INV
 COPY --chown=oracle:oinstall --from=db $ORACLE_BASE $ORACLE_BASE
 COPY --chown=oracle:oinstall --from=db $ORADATA     $ORADATA
@@ -33,7 +33,8 @@ RUN $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE -R
 USER oracle
 WORKDIR /home/oracle
 
-VOLUME ["$ORADATA"]
+#VOLUME ["$ORADATA"]
+VOLUME ["$ORACLE_INV", "$ORACLE_BASE", "$ORACLE_HOME", "$ORADATA"]
 EXPOSE 1521 5500 8080
 HEALTHCHECK --interval=1m --start-period=5m CMD $SCRIPTS_DIR/$MANAGE_ORACLE -h >/dev/null || exit 1
 CMD exec $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE
