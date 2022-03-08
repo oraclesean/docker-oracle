@@ -8,5 +8,5 @@ README.md
 # Include management file
 !manageOracle.sh
 # Include template files
-config/*.tmpl
+!config/*.tmpl
 # Include software installation and patch files
