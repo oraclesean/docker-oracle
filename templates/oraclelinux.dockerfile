@@ -42,15 +42,7 @@ LABEL org.label-schema.docker.cmd="docker run -d --name <CONTAINER_NAME> -e ORAC
 LABEL maintainer="Sean Scott <sean.scott@viscosityna.com>"
 LABEL database.version="$ORACLE_VERSION"
 LABEL database.edition="$ORACLE_EDITION"
-LABEL volume.oraclebase="$ORACLE_BASE"
-LABEL volume.oracleinv="$ORACLE_INV"
-LABEL volume.oraclehome="$ORACLE_HOME"
-###ORACLE_BASE_HOME_LABEL###
-###ORACLE_BASE_CONFIG_LABEL###
 LABEL volume.data="$ORADATA"
-LABEL volume.scripts="$SCRIPTS_DIR"
-LABEL volume.scripts.manage="$MANAGE_ORACLE"
-LABEL volume.sqlpath="$ORACLE_PATH"
 LABEL port.listener.listener1="1521"
 LABEL port.oemexpress="5500"
 LABEL port.http="8080"
