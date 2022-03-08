@@ -12,10 +12,8 @@ getEdition() {
               INSTALL_RESPONSE_ARG="oracle-${ORACLE_VERSION}-${ORACLE_EDITION}.conf"
               ORACLE_BASE_CONFIG_ARG="###"
               ORACLE_BASE_CONFIG_ENV="###"
-              ORACLE_BASE_CONFIG_LABEL="###"
               ORACLE_BASE_HOME_ARG="###"
               ORACLE_BASE_HOME_ENV="###"
-              ORACLE_BASE_HOME_LABEL="###"
               ORACLE_READ_ONLY_HOME_ARG="###"
               ORACLE_ROH_ENV="###"
                 case $ORACLE_VERSION in
@@ -44,10 +42,8 @@ getVersion() {
   ORACLE_HOME_ARG="${ORACLE_VERSION}/dbhome_1"
   ORACLE_BASE_CONFIG_ARG="ARG ORACLE_BASE_CONFIG=\$ORACLE_BASE/dbs"
   ORACLE_BASE_CONFIG_ENV="ORACLE_BASE_CONFIG=\$ORACLE_BASE_CONFIG \\\\"
-  ORACLE_BASE_CONFIG_LABEL="LABEL volume.oraclebaseconfig=\"\$ORACLE_BASE_CONFIG\""
   ORACLE_BASE_HOME_ARG="ARG ORACLE_BASE_HOME=\$ORACLE_BASE/homes"
   ORACLE_BASE_HOME_ENV="ORACLE_BASE_HOME=\$ORACLE_BASE_HOME \\\\"
-  ORACLE_BASE_HOME_LABEL="LABEL volume.oraclebasehome=\"\$ORACLE_BASE_HOME\""
   ORACLE_PDB_ARG="ARG ORACLE_PDB="
   ORACLE_PDB_ENV="ORACLE_PDB=\$ORACLE_PDB \\\\"
   ORACLE_PDB_LABEL="LABEL database.default.pdb=\"\$ORACLE_PDB\""
@@ -67,10 +63,8 @@ getVersion() {
               DOCKER_RUN_LABEL=""
               ORACLE_BASE_CONFIG_ARG="###"
               ORACLE_BASE_CONFIG_ENV="###"
-              ORACLE_BASE_CONFIG_LABEL="###"
               ORACLE_BASE_HOME_ARG="###"
               ORACLE_BASE_HOME_ENV="###"
-              ORACLE_BASE_HOME_LABEL="###"
               ORACLE_PDB_ARG="###"
               ORACLE_PDB_ENV="###"
               ORACLE_PDB_LABEL="###"
@@ -84,10 +78,8 @@ getVersion() {
        12*)   ORACLE_BASE_VERSION="$ORACLE_VERSION"
               ORACLE_BASE_CONFIG_ARG="###"
               ORACLE_BASE_CONFIG_ENV="###"
-              ORACLE_BASE_CONFIG_LABEL="###"
               ORACLE_BASE_HOME_ARG="###"
               ORACLE_BASE_HOME_ENV="###"
-              ORACLE_BASE_HOME_LABEL="###"
               ORACLE_READ_ONLY_HOME_ARG="###"
               PREINSTALL_TAG="$ORACLE_VERSION"
               ;;
@@ -145,10 +137,8 @@ processDockerfile() {
               MIN_SPACE_GB_ARG \
               ORACLE_BASE_CONFIG_ARG \
               ORACLE_BASE_CONFIG_ENV \
-              ORACLE_BASE_CONFIG_LABEL \
               ORACLE_BASE_HOME_ARG \
               ORACLE_BASE_HOME_ENV \
-              ORACLE_BASE_HOME_LABEL \
               ORACLE_EDITION_ARG \
               ORACLE_HOME_ARG \
               ORACLE_PDB_ARG \
