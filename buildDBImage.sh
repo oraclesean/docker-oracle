@@ -118,7 +118,7 @@ setBuildKit() {
 }
 
 createDockerfiles() {
-  dockerfile=$(mktemp ./Dockerfile.$1.$(date '+%Y%m%d%H%M'))
+  dockerfile=$(mktemp ./Dockerfile.$1.$(date '+%Y%m%d%H%M').XXXX)
   dockerignore=${dockerfile}.dockerignore
 
   chmod 664 $dockerfile
