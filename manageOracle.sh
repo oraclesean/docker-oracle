@@ -30,10 +30,17 @@ logger() {
   then printf "\n"
   fi
 
-  printf "%s\n" "  $@"
+    if [[ $__format =~ D ]]
+  then dt="at $(date -R)"
+  elif [[ $__format =~ d ]]
+  then dt="at $(date '+%F %T')"
+  else dt=""
+  fi
+
+  printf "%s %s\n" "  $@" "$dt"
 
     if [[ $__format =~ A ]]
-  then printf "${__line}\n\n"
+  then printf "${__line}\n"
   elif [[ $__format =~ a ]]
   then printf "\n"
   fi
@@ -126,12 +133,6 @@ configENV() {
 
   getPreinstall "$ORACLE_VERSION"
 
-    if [ -n "$TARGET_HOME" ] && ! [[ $TARGET_HOME == $ORACLE_BASE/* ]]
-  then error "The target ORACLE_HOME directory $TARGET_HOME must be a subdirectory of the ORACLE_BASE."
-  elif [ -n "$TARGET_HOME" ]
-  then getPreinstall "$TARGET_VERSION"
-  fi
-
   yum -y update
   yum -y install $RPM_LIST
   sync
@@ -140,15 +141,24 @@ configENV() {
   then yum -y install $RPM_SUPPLEMENT
   fi
 
+  yum clean all
+
+  mkdir -p {"$INSTALL_DIR","$SCRIPTS_DIR"} || error "Failure creating directories."
+}
+
+configDBENV() {
+  set -e
+
+  local __target_home=${TARGET_HOME:-$ORACLE_HOME}
+
   mkdir -p {"$ORACLE_INV","$ORACLE_HOME","$__target_home","$ORADATA"/{dbconfig,fast_recovery_area},"$ORACLE_BASE"/{admin,scripts/{setup,startup}}} || error "Failure creating directories."
    case $ORACLE_VERSION in
         18.*|19.*|21.*) if [ "${ROOH^^}" = "ENABLE" ]; then mkdir -p "$ORACLE_BASE"/{dbs,homes} || error "Failure creating directories."; fi
                         ;;
    esac
-  chown -R oracle:oinstall "$SCRIPTS_DIR" "$ORACLE_INV" "$ORACLE_BASE" "$ORADATA" "$__target_home" || error "Failure changing directory ownership."
-  ln -s "$ORACLE_BASE"/scripts /docker-entrypoint-initdb.d                                         || error "Failure setting Docker entrypoint."
-  echo oracle:oracle | chpasswd                                                                    || error "Failure setting the oracle user password."
-  yum clean all
+  chown -R oracle:oinstall "$INSTALL_DIR" "$SCRIPTS_DIR" "$ORACLE_INV" "$ORACLE_BASE" "$ORADATA" "$__target_home" || error "Failure changing directory ownership."
+  ln -s "$ORACLE_BASE"/scripts /docker-entrypoint-initdb.d || error "Failure setting Docker entrypoint."
+  echo oracle:oracle | chpasswd || error "Failure setting the oracle user password."
 }
 
 checkSum() {
@@ -160,41 +170,85 @@ checkSum() {
 }
 
 setBase() {
+#  case $ORACLE_VERSION in
+#       18.*|19.*|21.*) export ORACLE_BASE_CONFIG="$($ORACLE_HOME/bin/orabaseconfig)/dbs"
+#                       export ORACLE_BASE_HOME="$($ORACLE_HOME/bin/orabasehome)" ;;
+#                    *) export ORACLE_BASE_CONFIG="$ORACLE_HOME/dbs"
+#                       export ORACLE_BASE_HOME="$ORACLE_HOME" ;;
+#  esac
   case $ORACLE_VERSION in
-       18.*|19.*|21.*) export ORACLE_BASE_CONFIG="$(orabaseconfig)/dbs"
-                       export ORACLE_BASE_HOME="$(orabasehome)" ;;
-                    *) export ORACLE_BASE_CONFIG="$ORACLE_HOME/dbs"
-                       export ORACLE_BASE_HOME="$ORACLE_HOME" ;;
+       18*|19*|21*) export ORACLE_BASE_CONFIG="$($ORACLE_HOME/bin/orabaseconfig)/dbs"
+                    export ORACLE_BASE_HOME="$($ORACLE_HOME/bin/orabasehome)" ;;
+                 *) export ORACLE_BASE_CONFIG="$ORACLE_HOME/dbs"
+                    export ORACLE_BASE_HOME="$ORACLE_HOME" ;;
   esac
+  export TNS_ADMIN=$ORACLE_BASE_HOME/network/admin
+}
+
+mkPass() {
+  # Generate a random 16-character password; first character always alphanum, including one guaranteed special character:
+  echo "$(tr -dc '[:alnum:]' </dev/urandom | head -c 16)"
+}
+
+copyTemplate() {
+  # Copy template files (for TNS, listener, etc) to their destination and replace variables from the environment.
+  # $1 is the source template file
+  # $2 is the destination file
+  # $3 is append/replace file contents
+  case $3 in
+       r*|R*) option=">" ;;
+       *)     option=">>" ;;
+  esac
+
+    if [ -f "$1" ]
+  then eval "cat << EOF "$option" "$2"
+$(<"$1")
+EOF
+"
+  else error "Template $1 not found"
+  fi
+}
+
+setSudo() {
+    if [ "$1" == "allow" ]
+  then # Fix a problem that prevents root from su - oracle:
+       sed -i -e "s|\(^session\s*include\s*system-auth\)|#\1|" /etc/pam.d/su
+  else # Revert the change:
+       sed -i -e "s|^\(#\)\(session\s*include\s*system-auth\)|\2|" /etc/pam.d/su
+  fi
 }
 
 installPatch() {
   # $1 is the patch type (patch, opatch)
   # $2 is the version
-    if [ -d "$INSTALL_DIR/patches" ] && [ -f "$manifest" ]
-  then manifest="$(find $INSTALL_DIR -maxdepth 1 -name "manifest*" 2>/dev/null)"
-       grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\b${1}\b[[:blank:]]*${2}" $manifest | awk '{print $5,$2}' | while read patchid install_file
-          do
-               if [ -f "$INSTALL_DIR/patches/$install_file" ]
-             then case $1 in
-                  opatch) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/patches/$install_file" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)" ;;
-                  patch)  sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/patches/$install_file" || error "There was a problem unzipping $install_file"
-                          # Get the apply command from the README
-                          opatch_apply=$(grep -E "opatch .apply.*" "$INSTALL_DIR"/"$patchid"/README.* | sort | head -1 | awk '{print $2}')
-                          opatch_apply=${opatch_apply:-apply}
-                          sudo su - oracle -c "$ORACLE_HOME/OPatch/opatch $opatch_apply -silent $INSTALL_DIR/$patchid" || error "OPatch $opatch_apply for $patchid failed"
-                          ;;
-                  esac
-             else error "Patch $patchid identified in manifest not found"
-             fi
-        done
-  else error "The manifest file was not found"
+    if [ -d "$INSTALL_DIR/patches" ]
+  then
+         if [ -f "$manifest" ]
+       then manifest="$(find $INSTALL_DIR -maxdepth 1 -name "manifest*" 2>/dev/null)"
+            grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\b${1}\b[[:blank:]]*${2}" $manifest | awk '{print $5,$2}' | while read patchid install_file
+               do
+                    if [ -f "$INSTALL_DIR/patches/$install_file" ]
+                  then case $1 in
+                       opatch) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/patches/$install_file" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)" ;;
+                       patch)  sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/patches/$install_file" || error "There was a problem unzipping $install_file"
+                               # Get the apply command from the README
+                               opatch_apply=$(grep -E "opatch .apply.*" "$INSTALL_DIR"/"$patchid"/README.* | sort | head -1 | awk '{print $2}')
+                               opatch_apply=${opatch_apply:-apply}
+                               sudo su - oracle -c "$ORACLE_HOME/OPatch/opatch $opatch_apply -silent $INSTALL_DIR/$patchid" || error "OPatch $opatch_apply for $patchid failed"
+                               ;;
+                       esac
+                  else error "Patch $patchid identified in manifest not found"
+                  fi
+             done
+       else error "The manifest file was not found"
+       fi
+  else error "The patch directory was not found"
   fi
 }
 
 getPatches() {
   # Print a patch summary
-  $ORACLE_HOME/OPatch/opatch lspatches || logger BA "There was a problem running opatch lspatches"
+  sudo su - oracle -c "$ORACLE_HOME/OPatch/opatch lspatches" || logger BA "There was a problem running opatch lspatches"
 }
 
 installOracle() {
@@ -217,6 +271,8 @@ installOracle() {
   then error "Database edition SE is only available for version 11.2.0.4"
   fi
 
+  configDBENV
+
   checkDirectory "$ORACLE_BASE"
   checkDirectory "$__oracle_home"
 
@@ -233,8 +289,10 @@ installOracle() {
   done
        replaceVars "$INSTALL_DIR"/"$INSTALL_RESPONSE" "ORACLE_HOME" "$__oracle_home"
 
-  # Fix a problem that prevents root from su - oracle:
-  sed -i -e "s|\(^session\s*include\s*system-auth\)|#\1|" /etc/pam.d/su
+  # Allow root to su - oracle:
+  setSudo allow
+#  # Fix a problem that prevents root from su - oracle:
+#  sed -i -e "s|\(^session\s*include\s*system-auth\)|#\1|" /etc/pam.d/su
 
   # Install Oracle binaries
     if [ -f "$(find "$INSTALL_DIR"/ -type f -iregex '.*oracle.*\.rpm.*')" ] || [ -n "$ORACLE_RPM" ]
@@ -368,7 +426,7 @@ echo "End of binary installation"
   installPatch patch "${ORACLE_VERSION}"
   # Print a patch summary
     if [ -n "$DEBUG" ]
-  then sudo su - oracle -c "$(getPatches)"
+  then getPatches
   fi
 
   # Minimize the installation
@@ -416,8 +474,10 @@ echo "End of binary installation"
        18.*|19.*|21.*) if [ "${ROOH^^}" = "ENABLE" ]; then sudo su - oracle -c "$__oracle_home/bin/roohctl -enable"; unset ROOH; fi ;;
   esac
 
-  # Revert /etc/pam.d/su:
-  sed -i -e "s|^\(#\)\(session\s*include\s*system-auth\)|\2|" /etc/pam.d/su
+  # Revert pam.d sudo changes:
+  setSudo revert
+#  # Revert /etc/pam.d/su:
+#  sed -i -e "s|^\(#\)\(session\s*include\s*system-auth\)|\2|" /etc/pam.d/su
 }
 
 runsql() {
@@ -427,7 +487,7 @@ runsql() {
   fi
 
   NLS_DATE_FORMAT='YYYY-MM-DD HH24:MI:SS'
-  "$ORACLE_HOME"/bin/sqlplus -S / as sysdba <<EOF
+  "$ORACLE_HOME"/bin/sqlplus -S / as sysdba << EOF
 set head off termout on verify off lines 300 pages 9999 trimspool on feed off serverout on
 whenever sqlerror exit warning
 $1
@@ -439,9 +499,22 @@ EOF
   fi
 }
 
+startListener() {
+    if [ "$(ps -ef | grep tnslsnr | grep $ORACLE_HOME | grep -v grep | wc -l)" -eq 0 ]
+  then
+       $ORACLE_HOME/bin/lsnrctl start 2>/dev/null
+  fi
+}
+
+stopListener() {
+   for __oh in $(egrep -v "^#|^$" /etc/oratab | cut -d: -f2)
+    do $_oh/bin/lsnrctl stop 2>/dev/null 
+  done
+}
+
 startDB() {
     if [ -n "$ORACLE_HOME" ] && [ -n "$ORACLE_SID" ]
-  then "$ORACLE_HOME"/bin/lsnrctl start
+  then startListener
          if [ -z "$OPEN_MODE" ] || [ "$OPEN_MODE" = "OPEN" ]
        then runsql "startup;"
        else runsql "startup mount;"
@@ -454,8 +527,13 @@ startDB() {
 }
 
 stopDB() {
+  # Copy the oratab before shutdown to capture any changes:
+  local __dbconfig="$ORADATA"/dbconfig/"$ORACLE_SID"
+    if [ -f /etc/oratab ]
+  then cp /etc/oratab "$__dbconfig"/ 2>/dev/null
+  fi
   runsql "shutdown immediate;"
-  "$ORACLE_HOME"/bin/lsnrctl stop
+  stopListener
 }
 
 checkMode() {
@@ -487,22 +565,17 @@ setupDG() {
        cat "$SETUP_DIR"/"$BROKER_SCRIPT" | "$ORACLE_HOME"/bin/dgmgrl /
        sleep 60
        cat "$SETUP_DIR"/"$BROKER_CHECKS" | "$ORACLE_HOME"/bin/dgmgrl /
-  else mkdir -p "$ORACLE_BASE"/admin/"$DB_UNQNAME"/adump
+  else createAudit "$DB_UNQNAME"
        mkdir -p "$ORACLE_BASE"/diag/rdbms/"${DB_UNQNAME,,}"/"$ORACLE_SID"/trace
        touch "$ORACLE_BASE"/diag/rdbms/"${DB_UNQNAME,,}"/"$ORACLE_SID"/trace/alert_"$ORACLE_SID".log
        printf "%s:%s:N\n" "$ORACLE_SID" "$ORACLE_HOME" > /etc/oratab
        # Create a pfile for startup of the DG replica
-       cat <<- EOF > "$ORACLE_BASE_CONFIG"/init"$ORACLE_SID".ora
-        *.db_name=${ORACLE_SID}
-        *.db_unique_name=${DB_UNQNAME}
-	*.pga_aggregate_target=10M
-	*.sga_target=600M
-EOF
+       copyTemplate "$INSTALL_DIR"/init.ora.tmpl "$ORACLE_BASE_CONFIG"/init"$ORACLE_SID".ora replace
        # Create a password file
        "$ORACLE_HOME"/bin/orapwd file="$ORACLE_BASE_CONFIG"/orapw"$ORACLE_SID" force=yes format=12 <<< $(echo "$ORACLE_PWD")
        echo "startup nomount pfile='${ORACLE_BASE_CONFIG}/init${ORACLE_SID}.ora';" | "$ORACLE_HOME"/bin/sqlplus / as sysdba
        # Start listener
-       "$ORACLE_HOME"/bin/lsnrctl start
+       startListener
        # Wait for the database to come online
          if [ "$OPEN_MODE" = "MOUNT" ]
        then checkMode "MOUNT"
@@ -553,7 +626,7 @@ runDBCA() {
             __db_msg="$ORACLE_SID"
        fi
 
-       logger B "${FUNCNAME[0]}: Running DBCA for database $__db_msg"
+       logger BAd "${FUNCNAME[0]}: Running DBCA for database $__db_msg"
 
        # Additional messages for Data Guard:
          if [ -n "$CONTAINER_NAME" ]; then logger x "${FUNCNAME[0]}:        Container name is: $CONTAINER_NAME"; fi
@@ -562,7 +635,7 @@ runDBCA() {
 
          if [ "$SID_NUM" -eq 1 ]
        then # Start the listener in this home
-            "$ORACLE_HOME"/bin/lsnrctl start
+            startListener
             unset __pdb_only
             SIDENV="export ORACLE_SID=$ORACLE_SID"
        fi
@@ -581,11 +654,11 @@ runDBCA() {
                  IFS=$OLDIFS
                    if [ "$PDB_NUM" -eq 1 ]
                  then # Create the database and the first PDB
-                      logger A "${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $ORACLE_PDB"
+                      logger BAd "${FUNCNAME[0]}: Creating container database $__db_msg and pluggable database $ORACLE_PDB"
                       createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
                       printf "\nexport ORACLE_PDB=$ORACLE_PDB\n" >> $HOME/.bashrc
                  else # Create additional PDB
-                      logger A "${FUNCNAME[0]}: Creating pluggable database $ORACLE_PDB"
+                      logger BAd "${FUNCNAME[0]}: Creating pluggable database $ORACLE_PDB"
                       createDatabase NONE NONE TRUE 1 "$ORACLE_PDB" "$PDB_ADMIN"
                  fi
                  addTNSEntry "$ORACLE_PDB"
@@ -598,7 +671,7 @@ runDBCA() {
        then # Not an 11g database; PDB_COUNT > 0:
             PDB_ADMIN=PDBADMIN
             ORACLE_PDB=${ORACLE_PDB:-ORCLPDB}
-            logger A "${FUNCNAME[0]}: Creating container database $__db_msg and $__pdb_count pluggable database(s) with name $ORACLE_PDB"
+            logger BAd "${FUNCNAME[0]}: Creating container database $__db_msg and $__pdb_count pluggable database(s) with name $ORACLE_PDB"
             createDatabase "$__dbcaresponse" "$INIT_PARAMS" TRUE "$__pdb_count" "$ORACLE_PDB" "$PDB_ADMIN"
               if [ "$__pdb_count" -eq 1 ]
             then printf "\nexport ORACLE_PDB=$ORACLE_PDB\n" >> $HOME/.bashrc
@@ -610,7 +683,7 @@ runDBCA() {
             fi
             alterPluggableDB
        else # 11g database OR PDB_COUNT is not set; create a non-container database:
-            logger A "${FUNCNAME[0]}: Creating database $__db_msg"
+            logger BAd "${FUNCNAME[0]}: Creating database $__db_msg"
             createDatabase "$__dbcaresponse" "$INIT_PARAMS" FALSE
             printf "\nunset ORACLE_PDB\n" >> $HOME/.bashrc
        fi
@@ -618,7 +691,7 @@ runDBCA() {
   done
   IFS=$OLDIFS
 
-  logger BA "${FUNCNAME[0]}: DBCA complete"
+  logger BAd "${FUNCNAME[0]}: DBCA complete"
 }
 
 createDatabase() {
@@ -660,10 +733,36 @@ createDatabase() {
   fi
 }
 
+createAudit() {
+    if [ ! -d "$ORACLE_BASE/admin/$1/adump" ]
+  then mkdir -p $ORACLE_BASE/admin/$1/adump || error "Could not create the audit directory for $1"
+  fi
+}
+
 moveFiles() {
     if [ ! -d "$ORADATA/dbconfig/$ORACLE_SID" ]
   then mkdir -p "$ORADATA"/dbconfig/"$ORACLE_SID"
   fi
+
+  # Begin upgrade additions
+  # The ORACLE_HOME in the configuration directory oratab is the source of truth
+  # for existing databases, particularly after an upgrade.
+    if [ -f "$ORADATA/dbconfig/$ORACLE_SID/oratab" ]
+  then export ORACLE_HOME="$(egrep "^${ORACLE_SID}:" "$ORADATA/dbconfig/$ORACLE_SID/oratab" | egrep -v "^$|^#" | cut -d: -f2 | head -1)"
+  fi
+
+    if [ -f "$ORADATA/dbconfig/$ORACLE_SID/spfile${ORACLE_SID}.ora" ]
+  then __version="$(strings "$ORADATA/dbconfig/$ORACLE_SID/spfile${ORACLE_SID}.ora" | grep -e "[*.c|c]ompatible" | grep -v "#" | sed -e "s/[A-Za-z '=.*]//g" | head -c 2)"
+  elif [ -f "$ORADATA/dbconfig/$ORACLE_SID/init${ORACLE_SID}.ora" ]
+  then __version="$(grep -e "[*.c|c]ompatible" "$ORADATA/dbconfig/$ORACLE_SID/init${ORACLE_SID}.ora" | grep -v "#" | sed -e "s/[A-Za-z '=.*]//g" | head -c 2)"
+  fi
+
+#    if [ -n "$__version" ] && [[ ! $ORACLE_VERSION =~ $__version ]]
+#  then # This is an upgraded database. Override the existing ORACLE_VERSION
+#       # with the value from the init.ora:
+#       export ORACLE_VERSION="$__version"
+#  fi
+  # End upgrade additions
 
   setBase
 
@@ -716,16 +815,7 @@ moveFiles() {
 addTNSEntry() {
   ALIAS=$1
   setBase
-  cat << EOF >> "$ORACLE_BASE_HOME"/network/admin/tnsnames.ora
-${ALIAS} =
-  (DESCRIPTION =
-    (ADDRESS = (PROTOCOL = TCP)(HOST = ${CONTAINER_NAME=0.0.0.0})(PORT = 1521))
-    (CONNECT_DATA =
-      (SERVER = DEDICATED)
-      (SERVICE_NAME = ${ALIAS})
-    )
-  )
-EOF
+  copyTemplate "$INSTALL_DIR"/tnsnames.ora.tmpl "$ORACLE_BASE_HOME"/network/admin/tnsnames.ora append
 }
 
 alterPluggableDB() {
@@ -740,7 +830,7 @@ HealthCheck() {
   local __tabname="v\$database"
   local __pdb_count=${PDB_COUNT:-0}
 
-  source oraenv <<< "$(grep -E "\:${ORACLE_HOME}\:" /etc/oratab | cut -d: -f1 | head -1)" 1>/dev/null
+  source oraenv <<< "$(grep -E "^${ORACLE_SID}\:" /etc/oratab | cut -d: -f1 | head -1)" 1>/dev/null
   rc="$?"
 
     if [ "$rc" -ne 0 ]
@@ -799,10 +889,13 @@ postInstallRoot() {
 
   # If this is an upgrade image, run the target root script and attach the new home.
     if [ -n "$TARGET_HOME" ] && [ -d "$TARGET_HOME" ] && [ -f "$TARGET_HOME/root.sh" ]
-  then logger BA "Running root script in $TARGET_HOME"
+  then 
+       logger BA "Running root script in $TARGET_HOME"
        "$TARGET_HOME"/root.sh
        logger BA "Attaching home for upgrade"
+       setSudo allow
        sudo su - oracle -c "$TARGET_HOME/oui/bin/attachHome.sh"
+       setSudo revert
   fi
   # Additional steps to be performed as root
 
@@ -931,40 +1024,46 @@ else export ORACLE_PDB=$ORACLE_PDB
 fi
 
 # Check the audit path
-  if [ ! -d "$ORACLE_BASE"/admin/"$ORACLE_SID"/adump ]
-then mkdir -p "$ORACLE_BASE"/admin/"$ORACLE_SID"/adump
-fi
+createAudit "$ORACLE_SID"
 
 # Check whether database already exists
+#      There's an oratab  and  The ORACLE_SID is in the oratab                    and  There's an ORADATA for the SID    OR There's an ORADATA for the SID
   if [ -f "/etc/oratab" ] && [ "$(grep -Ec "^$ORACLE_SID\:" /etc/oratab)" -eq 1 ] && [ -d "$ORADATA"/"${ORACLE_SID^^}" ] || [ -d "$ORADATA"/"${ORACLE_SID}" ]
-then moveFiles
+then # Before all else, move files. This puts the oratab from config into the expected location:
+     moveFiles
+     # Begin upgrade additions
+     # Set the environment
+       if [ -f "/usr/local/bin/oraenv" ]
+     then __oraenv=/usr/local/bin/oraenv
+     else __oraenv=$ORACLE_HOME/bin/oraenv
+     fi
+
+     # Start the "default" database defined by ORACLE_SID:
+     . $__oraenv <<< $ORACLE_SID
+     createAudit "$ORACLE_SID"
      startDB
+
+     # Preserve the default ORACLE_SID used to call the container:
+     DEFAULT_SID=$ORACLE_SID
+     # Find other SID:
+      for __sid in "$(grep $__home /etc/oratab | grep -v "^#" | grep -Ev "^$DEFAULT_SID\:" | cut -d: -f1)"
+       do
+            if [ -z "$__sid" ]
+          then . $__oraenv <<< "$__sid"
+               createAudit "$__sid"
+               moveFiles
+               startDB
+          fi
+     done
+
+     # Restore the default ORACLE_SID environment
+     . $__oraenv <<< $DEFAULT_SID
+     # End upgrade additions
 else # Create the TNS configuration
      setBase
      mkdir -p "$ORACLE_BASE_HOME"/network/admin 2>/dev/null
-     echo "NAME.DIRECTORY_PATH=(TNSNAMES, EZCONNECT, HOSTNAME)" > "$ORACLE_BASE_HOME"/network/admin/sqlnet.ora
-
-     cat << EOF > "$ORACLE_BASE_HOME"/network/admin/listener.ora
-LISTENER = 
-  (DESCRIPTION_LIST = 
-    (DESCRIPTION = 
-      (ADDRESS = (PROTOCOL = IPC)(KEY = EXTPROC1)) 
-      (ADDRESS = (PROTOCOL = TCP)(HOST = ${CONTAINER_NAME=0.0.0.0})(PORT = 1521)) 
-    ) 
-  ) 
-
-SID_LIST_LISTENER =
-  (SID_LIST =
-    (SID_DESC =
-      (GLOBAL_DBNAME = ${DB_UNQNAME-$ORACLE_SID})
-      (ORACLE_HOME = ${ORACLE_HOME})
-      (SID_NAME = ${ORACLE_SID})
-    )
-  )
-
-DEDICATED_THROUGH_BROKER_LISTENER=ON
-DIAG_ADR_ENABLED = off
-EOF
+     copyTemplate "$INSTALL_DIR"/sqlnet.ora.tmpl "$ORACLE_BASE_HOME"/network/admin/sqlnet.ora replace
+     copyTemplate "$INSTALL_DIR"/listener.ora.tmpl "$ORACLE_BASE_HOME"/network/admin/listener.ora replace
 
        if [ -f "$SETUP_DIR"/tnsnames.ora ]
      then cp "$SETUP_DIR"/tnsnames.ora "$ORACLE_BASE_HOME"/network/admin/tnsnames.ora
@@ -973,37 +1072,21 @@ EOF
 
      # Create a database password if none exists
        if [ -z "$ORACLE_PWD" ]
-     then ORACLE_PWD=$(openssl rand -base64 8)1; export ORACLE_PWD
-          logger BA "${FUNCNAME[0]}: ORACLE PASSWORD FOR SYS, SYSTEM AND PDBADMIN: $ORACLE_PWD"
+     then export ORACLE_PWD="$(mkPass)"
+          # ORACLE_PWD=$(openssl rand -base64 8)1; export ORACLE_PWD
+          logger BA "Oracle password for SYS, SYSTEM and PDBADMIN: $ORACLE_PWD"
      fi
 
      # Create the user profile
-    cat << EOF >> "$HOME"/.bashrc
-export PS1="[\u - \\\${ORACLE_SID}] \w\n# "
-
-export ORACLE_BASE=${ORACLE_BASE}
-export ORACLE_HOME=${ORACLE_HOME}
-export PATH=${ORACLE_HOME}/bin:${ORACLE_HOME}/OPatch/:/usr/sbin:${PATH} 
-export CLASSPATH=${ORACLE_HOME}/jlib:${ORACLE_HOME}/rdbms/jlib
-export LD_LIBRARY_PATH=${ORACLE_HOME}/lib:/usr/lib
-export TNS_ADMIN=${ORACLE_BASE_HOME}/network/admin
-export ORACLE_PATH=${ORACLE_PATH}
-
-export ORACLE_SID=${ORACLE_SID}
-#export ORACLE_SID=${ORACLE_SID^^}
-EOF
+     copyTemplate "$INSTALL_DIR"/env.tmpl "$HOME"/.bashrc append
 
        if [ "$(rlwrap -v)" ]
-     then cat << EOF >> "$HOME"/.bashrc
-alias sqlplus="rlwrap \$ORACLE_HOME/bin/sqlplus"
-alias rman="rlwrap \$ORACLE_HOME/bin/rman"
-alias dgmgrl="rlwrap \$ORACLE_HOME/bin/dgmgrl"
-EOF
+     then copyTemplate "$INSTALL_DIR"/rlwrap.tmpl "$HOME"/.bashrc append
      fi > /dev/null 2>&1
 
      # Create login.sql
        if [ -n "$ORACLE_PATH" ]
-     then echo "set pages 9999 lines 200" > "$ORACLE_PATH"/login.sql
+     then copyTemplate "$INSTALL_DIR"/login.sql.tmpl "$ORACLE_PATH"/login.sql replace
      fi
 
      # Run DBCA if this is a standalone database or primary in a Data Guard configuration
@@ -1017,7 +1100,6 @@ EOF
 
      moveFiles
      runUserScripts "$ORACLE_BASE"/scripts/setup
-
 fi
 
 # Check database status
