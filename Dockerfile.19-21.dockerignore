@@ -1,0 +1,10 @@
+# Ignore files
+Dockerfile*
+.docker*
+.git*
+README.md
+# Ignore all directories
+**
+!manageOracle.sh
+!bashrc21
+!config/login.sql.tmpl
