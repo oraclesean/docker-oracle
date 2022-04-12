@@ -170,12 +170,6 @@ checkSum() {
 }
 
 setBase() {
-#  case $ORACLE_VERSION in
-#       18.*|19.*|21.*) export ORACLE_BASE_CONFIG="$($ORACLE_HOME/bin/orabaseconfig)/dbs"
-#                       export ORACLE_BASE_HOME="$($ORACLE_HOME/bin/orabasehome)" ;;
-#                    *) export ORACLE_BASE_CONFIG="$ORACLE_HOME/dbs"
-#                       export ORACLE_BASE_HOME="$ORACLE_HOME" ;;
-#  esac
   case $ORACLE_VERSION in
        18*|19*|21*) export ORACLE_BASE_CONFIG="$($ORACLE_HOME/bin/orabaseconfig)/dbs"
                     export ORACLE_BASE_HOME="$($ORACLE_HOME/bin/orabasehome)" ;;
@@ -212,9 +206,9 @@ EOF
 setSudo() {
     if [ "$1" == "allow" ]
   then # Fix a problem that prevents root from su - oracle:
-       sed -i -e "s|\(^session\s*include\s*system-auth\)|#\1|" /etc/pam.d/su
+       sed -i -e "s|\(^session\s*include\s*system-auth\)|\#\1|" /etc/pam.d/su
   else # Revert the change:
-       sed -i -e "s|^\(#\)\(session\s*include\s*system-auth\)|\2|" /etc/pam.d/su
+       sed -i -e "s|^\(\#\)\(session\s*include\s*system-auth\)|\2|" /etc/pam.d/su
   fi
 }
 
@@ -291,9 +285,6 @@ installOracle() {
 
   # Allow root to su - oracle:
   setSudo allow
-#  # Fix a problem that prevents root from su - oracle:
-#  sed -i -e "s|\(^session\s*include\s*system-auth\)|#\1|" /etc/pam.d/su
-
   # Install Oracle binaries
     if [ -f "$(find "$INSTALL_DIR"/ -type f -iregex '.*oracle.*\.rpm.*')" ] || [ -n "$ORACLE_RPM" ]
   then # Install Oracle from RPM
@@ -341,9 +332,6 @@ installOracle() {
             then mv "$OLD_INV"/* "$ORACLE_INV"/ || error "Failed to move Oracle Inventory from $OLD_INV to $ORACLE_INV"
                  find / -name oraInst.loc -exec sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" {} \;
                  rm -fr $OLD_INV || error "Failed to remove Oracle Inventory from $OLD_INV"
-#                  for inv in $(find / -name oraInst.loc)
-#                   do sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" "$inv"
-#                 done
             fi
 
               if ! [[ $OLD_HOME -ef $__oracle_home ]]
@@ -357,16 +345,7 @@ installOracle() {
             then rsync -a "$OLD_BASE"/ "$ORACLE_BASE" || error "Failed to move ORACLE_BASE from $OLD_BASE to $ORACLE_BASE"
                  rm -rf $OLD_BASE || error "Failed to remove $OLD_BASE after moving to $ORACLE_BASE"
             fi
-
-#            sed -i -e "s|^export ORACLE_HOME=.*$|export ORACLE_HOME=$__oracle_home|g" \
-#                   -e "s|^export TEMPLATE_NAME=.*$|export TEMPLATE_NAME=$INSTALL_TEMPLATE|g" \
-#                   -e "s|^CONFIG_NAME=.*$|CONFIG_NAME=\"$INSTALL_RESPONSE\"|g" $INIT_FILE
-#            chown -R oracle:oinstall $__oracle_home
-#            sed -i -e "s|^inventory_loc=.*$|inventory_loc=$ORACLE_INV|g" $__oracle_home/oraInst.loc
-#            sudo su - oracle -c "$__oracle_home/perl/bin/perl $__oracle_home/clone/bin/clone.pl ORACLE_HOME=$__oracle_home ORACLE_BASE=$ORACLE_BASE -defaultHomeName -invPtrLoc $__oracle_home/oraInst.loc"
   	 fi
-#       chgrp oinstall $INIT_FILE
-#       chgrp oinstall /etc/sysconfig/oracle*
 
   else # Install Oracle from archive
 
@@ -476,8 +455,6 @@ echo "End of binary installation"
 
   # Revert pam.d sudo changes:
   setSudo revert
-#  # Revert /etc/pam.d/su:
-#  sed -i -e "s|^\(#\)\(session\s*include\s*system-auth\)|\2|" /etc/pam.d/su
 }
 
 runsql() {
@@ -756,12 +733,6 @@ moveFiles() {
   elif [ -f "$ORADATA/dbconfig/$ORACLE_SID/init${ORACLE_SID}.ora" ]
   then __version="$(grep -e "[*.c|c]ompatible" "$ORADATA/dbconfig/$ORACLE_SID/init${ORACLE_SID}.ora" | grep -v "#" | sed -e "s/[A-Za-z '=.*]//g" | head -c 2)"
   fi
-
-#    if [ -n "$__version" ] && [[ ! $ORACLE_VERSION =~ $__version ]]
-#  then # This is an upgraded database. Override the existing ORACLE_VERSION
-#       # with the value from the init.ora:
-#       export ORACLE_VERSION="$__version"
-#  fi
   # End upgrade additions
 
   setBase
