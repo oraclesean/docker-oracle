@@ -122,6 +122,7 @@ USER oracle
 WORKDIR /home/oracle
 
 VOLUME ["$ORADATA"]
+VOLUME [ "$ORACLE_BASE/diag" ]
 EXPOSE 1521 5500 8080
 HEALTHCHECK --interval=1m --start-period=5m CMD $SCRIPTS_DIR/$MANAGE_ORACLE -h >/dev/null || exit 1
 CMD exec $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE
