@@ -1,3 +1,6 @@
+# Automate dynamic image builds
+
+# Set defaults for version, edition, tag and source:
 ORACLE_VERSION=${1:-19.14}
 ORACLE_EDITION=${2:-EE}
 TAG=${2:-7-slim}
@@ -6,30 +9,29 @@ SOURCE=${3:-oraclelinux}
 . ./functions.sh
 
 getEdition() {
+  # Set variables based on edition. 
   case $ORACLE_EDITION in
-       EE)    ORACLE_EDITION_ARG="EE" ;;
-       XE)    ORACLE_EDITION_ARG="XE"
-              INSTALL_RESPONSE_ARG="oracle-${ORACLE_VERSION}-${ORACLE_EDITION}.conf"
-              ORACLE_BASE_CONFIG_ARG="###"
-              ORACLE_BASE_CONFIG_ENV="###"
-              ORACLE_BASE_HOME_ARG="###"
-              ORACLE_BASE_HOME_ENV="###"
-              ORACLE_READ_ONLY_HOME_ARG="###"
-              ORACLE_ROH_ENV="###"
-                case $ORACLE_VERSION in
-                     11.2.0.2) ORACLE_HOME_ARG="11.2.0/xe"
-                               ;;
-                     18.4)     MIN_SPACE_GB_ARG=13
-                               ORACLE_HOME_ARG="18c/dbhomeXE"
-                               ORACLE_PDB_ARG="ARG ORACLE_PDB=XEPDB"
-                               ORACLE_RPM_ARG="ARG ORACLE_RPM=\"https://download.oracle.com/otn-pub/otn_software/db-express/oracle-database-xe-18c-1.0-1.x86_64.rpm\""
-                               ;;
-                     *)        error "Selected version ($ORACLE_VERSION) is not available for Express Edition"
-                               ;;
-                esac
-              ;;
-       SE*)   ORACLE_EDITION_ARG="SE" ;;
-       *)     error "Invalid edition name ($ORACLE_EDITION) provided" ;;
+       EE)  ORACLE_EDITION_ARG="EE" ;;
+       SE*) ORACLE_EDITION_ARG="SE" ;;
+       XE)  ORACLE_EDITION_ARG="XE"
+            INSTALL_RESPONSE_ARG="oracle-${ORACLE_VERSION}-${ORACLE_EDITION}.conf"
+            ORACLE_BASE_CONFIG_ARG="###"
+            ORACLE_BASE_CONFIG_ENV="###"
+            ORACLE_BASE_HOME_ARG="###"
+            ORACLE_BASE_HOME_ENV="###"
+            ORACLE_READ_ONLY_HOME_ARG="###"
+            ORACLE_ROH_ENV="###"
+            # Perform conditional setup by version.
+            case $ORACLE_VERSION in
+                 11.2.0.2) ORACLE_HOME_ARG="11.2.0/xe" ;;
+                 18.4)     MIN_SPACE_GB_ARG=13
+                           ORACLE_HOME_ARG="18c/dbhomeXE"
+                           ORACLE_PDB_ARG="ARG ORACLE_PDB=XEPDB"
+                           ORACLE_RPM_ARG="ARG ORACLE_RPM=\"https://download.oracle.com/otn-pub/otn_software/db-express/oracle-database-xe-18c-1.0-1.x86_64.rpm\""
+                           ;;
+                 *)        error "Selected version ($ORACLE_VERSION) is not available for Express Edition" ;;
+            esac ;;
+       *)   error "Invalid edition name ($ORACLE_EDITION) provided" ;;
   esac
 }
 
@@ -59,50 +61,47 @@ getVersion() {
   fi
 
   case $ORACLE_VERSION in
-       11*)   ORACLE_BASE_VERSION="$ORACLE_VERSION"
-              DOCKER_RUN_LABEL=""
-              ORACLE_BASE_CONFIG_ARG="###"
-              ORACLE_BASE_CONFIG_ENV="###"
-              ORACLE_BASE_HOME_ARG="###"
-              ORACLE_BASE_HOME_ENV="###"
-              ORACLE_PDB_ARG="###"
-              ORACLE_PDB_ENV="###"
-              ORACLE_PDB_LABEL="###"
-              ORACLE_READ_ONLY_HOME_ARG="###"
-              ORACLE_SID_ARG=ORCL
-              PDB_COUNT_ARG="###"
-              PDB_COUNT_ENV="###"
-              PCB_COUNT_LABEL="###"
-              PREINSTALL_TAG="11g"
-              ;;
-       12*)   ORACLE_BASE_VERSION="$ORACLE_VERSION"
-              ORACLE_BASE_CONFIG_ARG="###"
-              ORACLE_BASE_CONFIG_ENV="###"
-              ORACLE_BASE_HOME_ARG="###"
-              ORACLE_BASE_HOME_ENV="###"
-              ORACLE_READ_ONLY_HOME_ARG="###"
-              PREINSTALL_TAG="$ORACLE_VERSION"
-              ;;
-       18*)   ORACLE_BASE_VERSION="$ORACLE_VERSION"
-              ORACLE_HOME_ARG="18c/dbhome_1"
-              PREINSTALL_TAG="18c"
-              ;;
-       19*)   ORACLE_BASE_VERSION=19
-              INSTALL_RESPONSE_ARG="$ORACLE_BASE_VERSION"
-              ORACLE_HOME_ARG="19c/dbhome_1"
-              PREINSTALL_TAG="19c"
-              ;;
-       21*)   ORACLE_BASE_VERSION=21
-              INSTALL_RESPONSE_ARG="$ORACLE_BASE_VERSION"
-              ORACLE_HOME_ARG="21c/dbhome_1"
-              PREINSTALL_TAG="21c"
-              ;;
-       *)     error "Invalid version ($ORACLE_VERSION) provided" ;;
+       11*)     ORACLE_BASE_VERSION="$ORACLE_VERSION"
+                DOCKER_RUN_LABEL=""
+                ORACLE_BASE_CONFIG_ARG="###"
+                ORACLE_BASE_CONFIG_ENV="###"
+                ORACLE_BASE_HOME_ARG="###"
+                ORACLE_BASE_HOME_ENV="###"
+                ORACLE_PDB_ARG="###"
+                ORACLE_PDB_ENV="###"
+                ORACLE_PDB_LABEL="###"
+                ORACLE_READ_ONLY_HOME_ARG="###"
+                ORACLE_SID_ARG=ORCL
+                PDB_COUNT_ARG="###"
+                PDB_COUNT_ENV="###"
+                PCB_COUNT_LABEL="###"
+                PREINSTALL_TAG="11g"
+                ;;
+       12*)     ORACLE_BASE_VERSION="$ORACLE_VERSION"
+                ORACLE_BASE_CONFIG_ARG="###"
+                ORACLE_BASE_CONFIG_ENV="###"
+                ORACLE_BASE_HOME_ARG="###"
+                ORACLE_BASE_HOME_ENV="###"
+                ORACLE_READ_ONLY_HOME_ARG="###"
+                PREINSTALL_TAG="$ORACLE_VERSION"
+                ;;
+       18*)     ORACLE_BASE_VERSION="$ORACLE_VERSION"
+                PREINSTALL_TAG="${ORACLE_BASE_VERSION}c"
+                ORACLE_HOME_ARG="${PREINSTALL_TAG}/dbhome_1"
+                ;;
+       19*|21*) ORACLE_BASE_VERSION=${ORACLE_VERSION:0:2}
+                INSTALL_RESPONSE_ARG="$ORACLE_BASE_VERSION"
+                PREINSTALL_TAG="${ORACLE_BASE_VERSION}c" 
+                ORACLE_HOME_ARG="${PREINSTALL_TAG}/dbhome_1"
+                ;;
+       *)       error "Invalid version ($ORACLE_VERSION) provided" ;;
   esac
+
+  OEL_IMAGE="${SOURCE}:${TAG}-${PREINSTALL_TAG}"
 }
 
 getImage() {
-  docker images --filter=reference="${SOURCE}:${TAG}-${PREINSTALL_TAG}" --format "{{.Repository}}:{{.Tag}}"
+  docker images --filter=reference="${OEL_IMAGE}" --format "{{.Repository}}:{{.Tag}}"
 }
 
 setBuildKit() {
@@ -180,8 +179,6 @@ createIgnorefile() {
              then addException $filename database
              elif [ "$filetype" == "database" ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/"$filename" ] && [[ $edition =~ $ORACLE_EDITION ]]
              then addException $filename database
-#             elif [ "$filetype" == "database" ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/"$filename" ] && [[ $oel =~ ^$TAG.* ]]
-#             then addException $filename database
              elif [ "$filetype" == "opatch"   ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/patches/"$filename" ]
              then addException $filename patch
              elif [ "$filetype" == "patch" ]    && [ "$version" == "$ORACLE_VERSION" ]      && [ -f ./database/patches/"$filename" ]
@@ -196,7 +193,7 @@ getEdition
 setBuildKit
 
 # Set build options
-options="--force-rm=true --no-cache=true"
+options="--force-rm=true" # --progress=plain --no-cache=true"
 
 # Set build arguments
 arguments=""
@@ -207,15 +204,15 @@ fi
   if [ -z "$(getImage)" ]
 then # There is no base image
      # Create a base image:
-     FROM_BASE="FROM oraclelinux:7-slim as base"
+     FROM_BASE="FROM ${SOURCE}:${TAG} as base"
      FROM_OEL_BASE="base"
      createDockerfiles oraclelinux || error "There was a problem creating the Dockerfiles"
      processDockerfile $dockerfile
 
      # Run the build
-     DOCKER_BUILDKIT=$BUILDKIT docker build --progress=plain $options $arguments $rpm_list \
+     DOCKER_BUILDKIT=$BUILDKIT docker build $options $arguments $rpm_list \
                               --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-                              -t ${SOURCE}:${TAG}-${PREINSTALL_TAG} \
+                              -t ${OEL_IMAGE} \
                               -f $dockerfile . && rm $dockerfile $dockerignore
 fi
 
@@ -234,7 +231,7 @@ else addException "*.${ORACLE_VERSION}.rsp" asset
 fi
 createIgnorefile $ORACLE_BASE_VERSION
 
-DOCKER_BUILDKIT=$BUILDKIT docker build --progress=plain $options $arguments \
+DOCKER_BUILDKIT=$BUILDKIT docker build $options $arguments \
                          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                          -t oraclesean/db:${ORACLE_VERSION}-${ORACLE_EDITION} \
                          -f $dockerfile . && rm $dockerfile $dockerignore
