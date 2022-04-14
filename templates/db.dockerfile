@@ -61,7 +61,7 @@ ENV ORACLE_BASE=$ORACLE_BASE \
     TNS_ADMIN=$ORACLE_HOME/network/admin
 
 # Copy DB install files
-COPY $MANAGE_ORACLE $SCRIPTS_DIR/
+COPY --chown=oracle:oinstall $MANAGE_ORACLE      $SCRIPTS_DIR/
 COPY --chown=oracle:oinstall ./config/inst.*     $INSTALL_DIR/
 COPY --chown=oracle:oinstall ./config/manifest.* $INSTALL_DIR/
 COPY --chown=oracle:oinstall ./database/         $INSTALL_DIR/
@@ -111,6 +111,7 @@ ENV ORACLE_BASE=$ORACLE_BASE \
 USER oracle
 COPY --chown=oracle:oinstall ./config/dbca.*        $INSTALL_DIR/
 COPY --chown=oracle:oinstall ./config/*.tmpl        $INSTALL_DIR/
+COPY --chown=oracle:oinstall $MANAGE_ORACLE         $SCRIPTS_DIR/
 COPY --chown=oracle:oinstall --from=db $ORACLE_INV  $ORACLE_INV
 COPY --chown=oracle:oinstall --from=db $ORACLE_BASE $ORACLE_BASE
 COPY --chown=oracle:oinstall --from=db $ORADATA     $ORADATA

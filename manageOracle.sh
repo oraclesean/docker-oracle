@@ -983,14 +983,14 @@ then # No PDB name + no PDB count + no PDB list = Not a container DB
      unset PDB_COUNT
      unset PDB_LIST
 elif [ ! -z "$PDB_LIST" ]
-then # PDB list is defined
+then # PDB list is defined; create the first PDB as the fist PDB in the list.
      export ORACLE_PDB=$(echo $PDB_LIST | cut -d, -f1)
-elif [ -z "$ORACLE_PDB" ] && [ "$__pdb_count" -gt 0 ]
-then # No PDB name but PDB count > 0
+elif [ -n "$ORACLE_PDB" ] && [ -z "$PDB_COUNT" ]
+then # No PDB count but PDB name; create a single PDB with the given name.
+     export ORACLE_PDB=$ORACLE_PDB
+elif [ -z "$ORACLE_PDB" ] && [ "$PDB_COUNT" -gt 1 ]
+then # No PDB name but PDB count > 1; default the first PDB.
      export ORACLE_PDB=ORCLPDB1
-elif [ "$__pdb_count" -gt 0 ]
-then # PDB name is set and count > 0
-     export ORACLE_PDB=${ORACLE_PDB}1
 else export ORACLE_PDB=$ORACLE_PDB
 fi
 
