@@ -16,3 +16,5 @@
 /labs/farsync/*.dgs
 /labs/farsync/*.rman
 Dockerfile.Upgrade
+Dockerfile.db.*
+Dockerfile.oraclelinux.*
