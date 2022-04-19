@@ -179,10 +179,10 @@ createIgnorefile() {
              then addException $filename database
              elif [ "$filetype" == "database" ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/"$filename" ] && [[ $edition =~ $ORACLE_EDITION ]]
              then addException $filename database
-             elif [ "$filetype" == "opatch"   ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/patches/"$filename" ]
+             elif [ "$filetype" == "opatch" -o "$filetype" == "patch" ] && [ "$version" == "$ORACLE_BASE_VERSION" -o "$version" == "$ORACLE_VERSION" ] && [ -f ./database/patches/"$filename" ]
              then addException $filename patch
-             elif [ "$filetype" == "patch" ]    && [ "$version" == "$ORACLE_VERSION" ]      && [ -f ./database/patches/"$filename" ]
-             then addException $filename patch
+#             elif [ "$filetype" == "patch" ]    && [ "$version" == "$ORACLE_VERSION" ]      && [ -f ./database/patches/"$filename" ]
+#             then addException $filename patch
              fi
         done
   fi
@@ -193,7 +193,7 @@ getEdition
 setBuildKit
 
 # Set build options
-options="--force-rm=true" # --progress=plain --no-cache=true"
+options="--force-rm=true --no-cache=true" # --progress=plain
 
 # Set build arguments
 arguments=""
@@ -223,9 +223,9 @@ processDockerfile $dockerfile
 
 # Add exceptions to the ignore file
   if [ "$ORACLE_BASE_VERSION" != "$ORACLE_VERSION" ]
-then addException "*.$(echo $ORACLE_VERSION | cut -d. -f1).rsp" asset
-     addException "*.$(echo $ORACLE_VERSION | cut -d. -f1)" asset
-     addException "*.$ORACLE_VERSION" asset
+then addException "*.${ORACLE_BASE_VERSION}.rsp" asset #$(echo $ORACLE_VERSION | cut -d. -f1).rsp" asset
+     addException "*.${ORACLE_BASE_VERSION}" asset #(echo $ORACLE_VERSION | cut -d. -f1)" asset
+#     addException "*.$ORACLE_VERSION" asset
 else addException "*.${ORACLE_VERSION}.rsp" asset
      addException "*.${ORACLE_VERSION}" asset
 fi

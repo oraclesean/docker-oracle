@@ -61,6 +61,7 @@ Here you'll find version-specific files and configuration, including:
   30eb702fe0c1bee393bb80ff8f10afe9  p33516456_190000_Linux-x86-64.zip        patch     19.13.1  33516456
   de8c41d94676479b9aa35d66ca11c96a  p33457235_1913100DBRUR_Linux-x86-64.zip  patch     19.13.1  33457235
   7bcfdcd0f3086531e232fd0237b7438f  p33515361_190000_Linux-x86-64.zip        patch     19.14    33515361
+  fd96f9db3c1873dfee00efe8088186a4  p33912872_190000_Linux-x86-64.zip        patch     19       33912872
   ```  
 
   Column layout:
@@ -84,6 +85,7 @@ Here you'll find version-specific files and configuration, including:
   Lines beginning with a `#` are ignored as comments.
 
   In this example, the patch number `33457235` appears twice, once for 19.13 and agains for 19.13.1, but there are version-specific files/checksums.
+  Patch 33912872 appears once, with a generic version. This patch is applicable to any release but must be applied after the RU. The build process evaluates patches in order, so it will apply this general patch last.
 
 Additional template files exist in this directory (I will eventually move them to the `template` directory for consistency). There are three categories:
 - TNS configurations. Templates for setting up listener and networking configurations. Customize as necessary. During initial database creation, the files are copied to their proper locations and variables interpreted from the environment.
