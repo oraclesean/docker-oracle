@@ -221,7 +221,6 @@ installPatch() {
   then
          if [ -f "$manifest" ]
        then manifest="$(find $INSTALL_DIR -maxdepth 1 -name "manifest*" 2>/dev/null)"
-#            grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\b${1}\b[[:blank:]]*${2}" $manifest | awk '{print $5,$2}' | while read patchid install_file
             # Allow manifest to hold version-specific (version = xx.yy) and generic patches (version = xx) and apply them in order.
             grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\b${1}\b[[:blank:]]*\(${__major_version}[[:blank:]]\|${__minor_version}\)" $manifest | awk '{print $5,$2}' | while read patchid install_file
 

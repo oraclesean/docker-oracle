@@ -181,8 +181,6 @@ createIgnorefile() {
              then addException $filename database
              elif [ "$filetype" == "opatch" -o "$filetype" == "patch" ] && [ "$version" == "$ORACLE_BASE_VERSION" -o "$version" == "$ORACLE_VERSION" ] && [ -f ./database/patches/"$filename" ]
              then addException $filename patch
-#             elif [ "$filetype" == "patch" ]    && [ "$version" == "$ORACLE_VERSION" ]      && [ -f ./database/patches/"$filename" ]
-#             then addException $filename patch
              fi
         done
   fi
