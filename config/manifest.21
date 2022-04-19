@@ -4,3 +4,6 @@
 02d913d38422f44abb9a256b88f7082e  p6880880_210000_Linux-x86-64.zip              opatch          21              6880880
 e52c22cdc2f6cb18f571569c9412b693  p33516412_210000_Linux-x86-64.zip		patch		21.5		33516412
 a4f3339727becb27a4033b84615ac214  p33843745_210000_Linux-x86-64.zip		patch		21.6		33843745
+# DATABASE PERL UPDATE FOR 21C TO V5.32-1 (CVE-2022-23990 - LIBEXPAT UPDATE)
+# General for any version, must be applied after RU
+1e3fdfd8dfea43b9d9f34d1202348b89  p33928944_210000_Linux-x86-64.zip             patch           21		33928944
