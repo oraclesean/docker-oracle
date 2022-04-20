@@ -5,6 +5,7 @@ ORACLE_VERSION=${1:-19.14}
 ORACLE_EDITION=${2:-EE}
 TAG=${2:-7-slim}
 SOURCE=${3:-oraclelinux}
+DB_REPO=${4:-oraclesean/db}
 
 . ./functions.sh
 
@@ -48,13 +49,11 @@ getVersion() {
   ORACLE_BASE_HOME_ENV="ORACLE_BASE_HOME=\$ORACLE_BASE_HOME \\\\"
   ORACLE_PDB_ARG="ARG ORACLE_PDB="
   ORACLE_PDB_ENV="ORACLE_PDB=\$ORACLE_PDB \\\\"
-  ORACLE_PDB_LABEL="LABEL database.default.pdb=\"\$ORACLE_PDB\""
   ORACLE_READ_ONLY_HOME_ARG="ARG ROOH="
   ORACLE_ROH_ENV="ROOH=\$ROOH \\\\"
   ORACLE_RPM_ARG=""
   PDB_COUNT_ARG="ARG PDB_COUNT=1"
   PDB_COUNT_ENV="PDB_COUNT=\$PDB_COUNT \\\\"
-  PDB_COUNT_LABEL="LABEL database.default.pdb_count=\"\$PDB_COUNT\""
 
     if [ "$ORACLE_VERSION" == "11.2.0.2" ] || [ "$ORACLE_VERSION" == "18.4" ]
   then ORACLE_EDITION="XE"
@@ -69,7 +68,6 @@ getVersion() {
                 ORACLE_BASE_HOME_ENV="###"
                 ORACLE_PDB_ARG="###"
                 ORACLE_PDB_ENV="###"
-                ORACLE_PDB_LABEL="###"
                 ORACLE_READ_ONLY_HOME_ARG="###"
                 ORACLE_SID_ARG=ORCL
                 PDB_COUNT_ARG="###"
@@ -128,39 +126,6 @@ createDockerfiles() {
   cat ./templates/$1.dockerignore > $dockerignore
 }
 
-processDockerfile() {
-   for var in DOCKER_RUN_LABEL \
-              FROM_BASE \
-              FROM_OEL_BASE \
-              INSTALL_RESPONSE_ARG \
-              MIN_SPACE_GB_ARG \
-              ORACLE_BASE_CONFIG_ARG \
-              ORACLE_BASE_CONFIG_ENV \
-              ORACLE_BASE_HOME_ARG \
-              ORACLE_BASE_HOME_ENV \
-              ORACLE_EDITION_ARG \
-              ORACLE_HOME_ARG \
-              ORACLE_PDB_ARG \
-              ORACLE_PDB_ENV \
-              ORACLE_PDB_LABEL \
-              ORACLE_READ_ONLY_HOME_ARG \
-              ORACLE_ROH_ENV \
-              ORACLE_RPM_ARG \
-              ORACLE_SID_ARG \
-              ORACLE_VERSION \
-              PDB_COUNT_ARG \
-              PDB_COUNT_ENV \
-              PDB_COUNT_LABEL
-           do REPIFS=$IFS
-              IFS=
-              replaceVars "$1" "$var"
-              IFS=$REPIFS
-         done
-
-  # Remove unset lines
-  sed -i -e '/###$/d' $1
-}
-
 addException() {
   case $2 in
        database) local __path="database" ;;
@@ -170,20 +135,67 @@ addException() {
        printf '!/%s/%s\n' $__path $1 >> $dockerignore
 }
 
-createIgnorefile() {
-    if [ -f ./config/manifest."$1" ]
-  then 
-       grep -ve "^#" ./config/manifest."$1" | awk '{print $2,$3,$4,$5}' | while IFS=" " read -r filename filetype version edition oel
+processManifest() {
+    if [ -f ./config/manifest."$ORACLE_BASE_VERSION" ]
+  then
+       grep -ve "^#" ./config/manifest."$ORACLE_BASE_VERSION" | awk '{print $1,$2,$3,$4,$5}' | while IFS=" " read -r checksum filename filetype version extra
           do
                if [ "$filetype" == "database" ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/"$filename" ] && [ -z "$edition" ]
-             then addException $filename database
+             then case $1 in
+                  ignore) addException $filename database ;;
+                  label)  sed -i -e "/^###SOFTWARE_LABEL###/i LABEL database.software.${version}=\"Edition=${extra}, Version=${version}, File=${filename}, md5sum=${checksum}\"\n" $dockerfile ;;
+                  esac
              elif [ "$filetype" == "database" ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/"$filename" ] && [[ $edition =~ $ORACLE_EDITION ]]
-             then addException $filename database
+             then case $1 in
+                  ignore) addException $filename database ;;
+                  label)  sed -i -e "/^###SOFTWARE_LABEL###/i LABEL database.software.${version}=\"Edition=${extra}, Version=${version}, File=${filename}, md5sum=${checksum}\"\n" $dockerfile ;;
+                  esac
              elif [ "$filetype" == "opatch" -o "$filetype" == "patch" ] && [ "$version" == "$ORACLE_BASE_VERSION" -o "$version" == "$ORACLE_VERSION" ] && [ -f ./database/patches/"$filename" ]
-             then addException $filename patch
+             then case $1 in
+                  ignore) addException $filename patch ;;
+                  label)  sed -i -e "/^###SOFTWARE_LABEL###/i LABEL database.patch.${extra}=\"Patch ID=${extra}, Version=${version}, File=${filename}, md5sum=${checksum}\"\n" $dockerfile ;;
+                  esac
              fi
         done
   fi
+}
+
+processDockerfile() {
+   for var in DB_REPO \
+              DOCKER_RUN_LABEL \
+              FROM_BASE \
+              FROM_OEL_BASE \
+              INSTALL_RESPONSE_ARG \
+              MIN_SPACE_GB_ARG \
+              OEL_IMAGE \
+              ORACLE_BASE_CONFIG_ARG \
+              ORACLE_BASE_CONFIG_ENV \
+              ORACLE_BASE_HOME_ARG \
+              ORACLE_BASE_HOME_ENV \
+              ORACLE_BASE_VERSION \
+              ORACLE_EDITION_ARG \
+              ORACLE_HOME_ARG \
+              ORACLE_PDB_ARG \
+              ORACLE_PDB_ENV \
+              ORACLE_READ_ONLY_HOME_ARG \
+              ORACLE_ROH_ENV \
+              ORACLE_RPM_ARG \
+              ORACLE_SID_ARG \
+              ORACLE_VERSION \
+              PDB_COUNT_ARG \
+              PDB_COUNT_ENV \
+              PREINSTALL_TAG
+           do REPIFS=$IFS
+              IFS=
+              replaceVars "$1" "$var"
+              IFS=$REPIFS
+         done
+
+  # Insert labesl for each patch in apply order.
+  processManifest label
+
+  # Remove unset lines
+  sed -i -e '/###$/d' $1
 }
 
 getVersion
@@ -210,7 +222,7 @@ then # There is no base image
      # Run the build
      DOCKER_BUILDKIT=$BUILDKIT docker build $options $arguments $rpm_list \
                               --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-                              -t ${OEL_IMAGE} \
+                              -t $OEL_IMAGE \
                               -f $dockerfile . && rm $dockerfile $dockerignore
 fi
 
@@ -221,15 +233,14 @@ processDockerfile $dockerfile
 
 # Add exceptions to the ignore file
   if [ "$ORACLE_BASE_VERSION" != "$ORACLE_VERSION" ]
-then addException "*.${ORACLE_BASE_VERSION}.rsp" asset #$(echo $ORACLE_VERSION | cut -d. -f1).rsp" asset
-     addException "*.${ORACLE_BASE_VERSION}" asset #(echo $ORACLE_VERSION | cut -d. -f1)" asset
-#     addException "*.$ORACLE_VERSION" asset
+then addException "*.${ORACLE_BASE_VERSION}.rsp" asset
+     addException "*.${ORACLE_BASE_VERSION}" asset
 else addException "*.${ORACLE_VERSION}.rsp" asset
      addException "*.${ORACLE_VERSION}" asset
 fi
-createIgnorefile $ORACLE_BASE_VERSION
+processManifest ignore 
 
 DOCKER_BUILDKIT=$BUILDKIT docker build $options $arguments \
                          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-                         -t oraclesean/db:${ORACLE_VERSION}-${ORACLE_EDITION} \
+                         -t ${DB_REPO}:${ORACLE_VERSION}-${ORACLE_EDITION} \
                          -f $dockerfile . && rm $dockerfile $dockerignore

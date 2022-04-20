@@ -21,25 +21,6 @@ ARG DEBUG=
 ARG INSTALL_RESPONSE=inst.###INSTALL_RESPONSE_ARG###.rsp
 ARG REMOVE_COMPONENTS="DBMA,HELP,ORDS,OUI,PATCH,PILOT,SQLD,SUP,UCP,TCP,ZIP"
 
-LABEL org.label-schema.schema-version="1.0"
-LABEL org.label-schema.url="http://oraclesean.com"
-LABEL org.label-schema.version="$BUILD_VERSION"
-LABEL org.label-schema.build-date="$BUILD_DATE"
-LABEL org.label-schema.vcs-url="https://github.com/oraclesean"
-LABEL org.label-schema.name="oraclesean/oracledb-$ORACLE_VERSION-$ORACLE_EDITION"
-LABEL org.label-schema.description="Extensible Oracle $ORACLE_VERSION database"
-LABEL org.label-schema.docker.cmd="docker run -d --name <CONTAINER_NAME> -e ORACLE_SID=<ORACLE SID> ###DOCKER_RUN_LABEL###<IMAGE NAME>"
-LABEL maintainer="Sean Scott <sean.scott@viscosityna.com>"
-LABEL database.version="$ORACLE_VERSION"
-LABEL database.edition="$ORACLE_EDITION"
-LABEL volume.data="$ORADATA"
-LABEL port.listener.listener1="1521"
-LABEL port.oemexpress="5500"
-LABEL port.http="8080"
-LABEL database.default.sid="$ORACLE_SID"
-###ORACLE_PDB_LABEL###
-###PDB_COUNT_LABEL###
-
 # Environment settings
 ENV ORACLE_BASE=$ORACLE_BASE \
     ORACLE_HOME=$ORACLE_HOME \
@@ -72,6 +53,10 @@ RUN chmod ug+x $SCRIPTS_DIR/$MANAGE_ORACLE && \
 
 FROM ###FROM_OEL_BASE###
 
+# Build defaults
+ARG BUILD_DATE=
+ARG BUILD_VERSION=1.0
+
 # Database defaults
 ARG ORACLE_VERSION=###ORACLE_VERSION###
 ARG ORACLE_INV=/u01/app/oraInventory
@@ -88,6 +73,25 @@ ARG ORACLE_SID=###ORACLE_SID_ARG###
 
 # Pass --build-arg DEBUG="bash -x" to run scripts in debug mode.
 ARG DEBUG=
+
+# Label the image:
+LABEL org.label-schema.schema-version="1.0"
+LABEL org.label-schema.url="http://oraclesean.com"
+LABEL org.label-schema.version="$BUILD_VERSION"
+LABEL org.label-schema.build-date="$BUILD_DATE"
+LABEL org.label-schema.vcs-url="https://github.com/oraclesean"
+LABEL org.label-schema.name="###DB_REPO###-${ORACLE_VERSION}-${ORACLE_EDITION}"
+LABEL org.label-schema.description="Extensible Oracle $ORACLE_VERSION database"
+LABEL org.label-schema.docker.cmd="docker run -d --name <CONTAINER_NAME> -e ORACLE_SID=<ORACLE SID> ###DOCKER_RUN_LABEL### ###DB_REPO###-${ORACLE_VERSION}-${ORACLE_EDITION}"
+LABEL maintainer="Sean Scott <sean.scott@viscosityna.com>"
+LABEL database.version="$ORACLE_VERSION"
+LABEL database.edition="$ORACLE_EDITION"
+###SOFTWARE_LABEL###
+LABEL volume.data="$ORADATA"
+LABEL volume.diagnostic_dest="$ORACLE_BASE/diag"
+LABEL port.listener.listener1="1521"
+LABEL port.oemexpress="5500"
+LABEL port.http="8080"
 
 # Environment settings
 ENV ORACLE_BASE=$ORACLE_BASE \

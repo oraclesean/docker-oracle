@@ -6,7 +6,7 @@ ARG INSTALL_DIR=/opt/install
 ARG ORACLE_PATH=/home/oracle
 
 # Database defaults
-ARG ORACLE_VERSION=###ORACLE_VERSION###
+ARG ORACLE_VERSION=###ORACLE_BASE_VERSION###
 
 # Build defaults
 ARG RPM_LIST="oracle-epel-release-el7 file-5.11 git less strace sudo tree vi which bash-completion"
@@ -24,10 +24,9 @@ LABEL org.label-schema.url="http://oraclesean.com"
 LABEL org.label-schema.version="$BUILD_VERSION"
 LABEL org.label-schema.build-date="$BUILD_DATE"
 LABEL org.label-schema.vcs-url="https://github.com/oraclesean"
-LABEL org.label-schema.name="oraclelinux/7-slim-$ORACLE_VERSION"
-LABEL org.label-schema.description="oraclelinux with Oracle Database $ORACLE_VERSION prerequisites"
+LABEL org.label-schema.name="###OEL_IMAGE###"
+LABEL org.label-schema.description="oraclelinux with Oracle Database ###PREINSTALL_TAG### prerequisites"
 LABEL maintainer="Sean Scott <sean.scott@viscosityna.com>"
-LABEL database.version="$ORACLE_VERSION"
 
 ENV ORACLE_PATH=$ORACLE_PATH \
     INSTALL_DIR=$INSTALL_DIR \
