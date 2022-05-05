@@ -3,9 +3,9 @@
 # Set defaults for version, edition, tag and source:
 ORACLE_VERSION=${1:-19.14}
 ORACLE_EDITION=${2:-EE}
-TAG=${2:-7-slim}
-SOURCE=${3:-oraclelinux}
-DB_REPO=${4:-oraclesean/db}
+TAG=${3:-7-slim}
+SOURCE=${4:-oraclelinux}
+DB_REPO=${5:-oraclesean/db}
 
 . ./functions.sh
 

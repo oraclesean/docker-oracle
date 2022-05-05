@@ -1,5 +1,5 @@
 # Update
-April 13 2022: I'm in the process of updating the documentation to reflect changes to operation/architecture in this repo. Please bear with me as I make these changes!
+May 5 2022: I'm in the process of updating the documentation to reflect changes to operation/architecture in this repo. Please bear with me as I make these changes!
 
 # docker-oracle
 A repository of Docker image builds for creating Oracle databases. This repo replaces the other Docker repos I maintain. 
@@ -8,37 +8,71 @@ Jump to a section:
 - [Build an image](#build-an-image)
   - [Build options and examples](#build-options-and-examples)
 - [Run a container](#run-a-container)
-  - [Examples for running Oracle Database containers](#run-options-and-examples)
+  - [Examples: Run Oracle Database containers](#run-options-and-examples)
 - [Directory structure](#directory-structure)
   - [Where to put files](#file-placement)
 - [Why this Repo](#why-this-repo)
   - [Features](#features)
+- [Errata](#errata)
 
-# Why this Repo
-I build and run many Oracle databases in containers. There were things I didn't like about Oracle's build scripts. My goals for this repository are:
-- Build any version and any patch level
-  - Code should be agnostic
-  - Migrate version-specific actions to templates
-  - Store versioned information as configurations and manifests
-  - Eliminate duplicate assets
-  - Flatten and simplify the directory tree
-- Streamline builds and reduce image build times
-- Allow build- and run-time customization
-- Avoid unnecessary environment settings
-- Follow Oracle recommendations and best practices
-- Support for archive and RPM-based installations
-- Leverage buildx/BuildKit capabilities
-- Support advanced features and customization:
-  - Read-Only Homes
-  - CDB and non-CDB database creation
-  - For CDB databases, control the number/naming of PDBs
-  - Data Guard, Sharding, RAC, GoldenGate, upgrades, etc.
+# Build an image
+One [reason behind this repo](#why-this-repo) was reducing duplication. I wanted one set of scripts (not one-per-version) and less maintenance. That created a need for more than one Dockerfile (one per version) because building 11g and 21c images is *mostly* boilerplate, but not entirely, and Dockerfiles don't take variables. This repo solves that by taking boilerplate Dockerfile templates, processing them to substitute variables, and using them for the build. Named Dockerfiles enable matching .dockerignore files to limit context. But, every version still needs a unique Dockerfile. Rather than polluting the directory with versioned Dockerfiles run directly with `docker build` I'm hiding the complexity with temporary files and a shell script. Version and edition information passed to the script generates temporary Dockerfile and .dockerignore files, runs `docker build`, then deletes the temporary file.
 
-# Build an Image
-TODO
+This is a temporary workaround. Dockerfile 1.4 and Buildx v0.8+, introduced in May 2022, add control over build context. I'm working on integrating the new capability. Until then, `buildDBImage.sh` manages Dockerfiles and builds.
 
-# Run a Container
-TODO
+## Build options and examples
+To build a database image, run `buildDBImage.sh` and pass optional values for version, edition, tag, source, and repository name:
+```
+./buildDBImage.sh [version] [edition] [tag] [source] [repository]
+```
+
+- `version`: The database version to build. The value must match a version in a manifest file. (Default: `19.14`)
+- `edition`: The edition to build. Acceptable values:
+  - `EE`: Enterprise Edition
+  - 'SE`: Standard Edition, Standard Edition 2
+  - `XE`: Express Edition (Only for versions 11.2.0.2, 18.4)
+- `tag`: The base OEL version. Options are `7-slim` or `8-slim`. (Default: `7-slim`)
+- `source`: The OEL source. (Default: `oraclelinux`)
+- `repository`: The image repository name assignment. (Default: `oraclesean/db`)
+
+Images created by the script are named as: `[repository]:[version]-[edition]`
+It additionally creates a version-specific Linux image: `[source]-[tag]-[base_version]` where the base version is 11g, 12.1, 12.2, 18c, 19c, or 21c. This Linux image includes the database prerequisites for the given version and makes building multiple database images for the same database version faster. The majority of the build time is spent applying prerequisite RPMs. The build understands if a version-ready image is present and uses it.
+
+## TODO:
+- Replace positional options with flags
+- Expand customizations
+- Add flexibility to pass `--build-arg`s to the script/image
+- Add a "Create Dockerfile" option (don't run the build)
+- Add Dockerfile naming capability
+- Add a help menu and error dialogs
+- Integrate secrets
+- More...
+
+# Run a container
+Run database containers as you would normally, using `docker run [options] [image-name]`.
+
+## Run options and examples
+Options are controlled by environment variables set via the `docker run -e` flag:
+- `PDB_COUNT`: Create non-container databases by setting this value to 0, or set the number of pluggable databases to be spawned.
+- `CREATE_CONTAINER`: Ture/false, an alternate method for creating a non-CDB database.
+- `ORACLE_PDB`: This is the prefix for the PDB's (when PDB_COUNT > 1) or the PDB_NAME (when PDB_COUNT=1, the default).
+- `DB_UNQNAME`: Set the database Unique Name. Default is ORACLE_SID; used mainly for creating containers used for Data Guard where the database and unique names are different, and avoids generating multiple diagnostic directory trees.
+- `PDB_LIST`: A comma-delimited list of PDB names. When present, overrides the PDB_COUNT and ORACLE_PDB values.
+- `ORACLE_CHARACTERSET` and `ORACLE_NLS_CHARACTERSET`: Set database character sets.
+- `INIT_PARAMS`: A list of parameters to set in the database at creation time. The default sets the DB_CREATE_FILE_DEST, DB_CREATE_ONLINE_LOG_DEST_1, and DB_RECOVERY_FILE_DEST to $ORADATA (enabling OMF) and turns off auditing.
+- `DEBUG="bash -x"`: Debug container creation.
+
+Create a non-container database:
+`docker run -d -e PDB_COUNT=0 IMG_NAME`
+
+Create a container database with custom SID and PDB name:
+`docker run -d -e ORACLE_SID=mysid -e ORACLE_PDB=mypdb IMG_NAME`
+
+Create a container database with a default SID and three PDB named mypdb[1,2,3]:
+`docker run -d -e PDB_COUNT=3 -e ORACLE_PDB=mypdb IMG_NAME`
+
+Create a container database with custom SID and named PDB:
+`docker run -d -e ORACLE_SID=mydb -e PDB_LIST="test,dev,prod" IMG_NAME`
 
 # Directory Structure
 Three subdirectories contain the majority of assets and configuration needed by images.
@@ -126,6 +160,26 @@ oracle/db     19.13.1-EE   7.58GB
 The total size of these images is not 442MB + 133MB + 7.58GB. Layers in the oraclelinux:7-slim are reused in the oraclelinux:7-slim-19c image, which are reused in the oracle/db:19.13.1-EE image.
 
 The buildDBImage.sh script reads these templates and creates temporary Dockerfiles and dockerignore files, using information in the manifest according to the version (and other information) passed to the script.
+
+# Why this Repo
+I build and run many Oracle databases in containers. There were things I didn't like about Oracle's build scripts. My goals for this repository are:
+- Build any version and any patch level
+  - Code should be agnostic
+  - Migrate version-specific actions to templates
+  - Store versioned information as configurations and manifests
+  - Eliminate duplicate assets
+  - Flatten and simplify the directory tree
+- Streamline builds and reduce image build times
+- Allow build- and run-time customization
+- Avoid unnecessary environment settings
+- Follow Oracle recommendations and best practices
+- Support for archive and RPM-based installations
+- Leverage buildx/BuildKit capabilities
+- Support advanced features and customization:
+  - Read-Only Homes
+  - CDB and non-CDB database creation
+  - For CDB databases, control the number/naming of PDBs
+  - Data Guard, Sharding, RAC, GoldenGate, upgrades, etc.
 
 # Legacy README:
 There is one script to handle all operations, for all editions and versions. This adds some complexity to the script (it has to accommodate peculiarities of every version and edition) but:
