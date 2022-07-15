@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 FROM ###FROM_OEL_BASE### as db
 
 # Database defaults
@@ -48,7 +49,7 @@ COPY --chown=oracle:oinstall ./config/manifest.* $INSTALL_DIR/
 COPY --chown=oracle:oinstall ./database/         $INSTALL_DIR/
 
 # Install DB software binaries
-RUN chmod ug+x $SCRIPTS_DIR/$MANAGE_ORACLE && \
+RUN ###MOS_SECRET### chmod ug+x $SCRIPTS_DIR/$MANAGE_ORACLE && \
     $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE -O
 
 FROM ###FROM_OEL_BASE###
@@ -128,6 +129,7 @@ WORKDIR /home/oracle
 
 VOLUME ["$ORADATA"]
 VOLUME [ "$ORACLE_BASE/diag" ]
+###SYSTEMD_VOLUME###
 EXPOSE 1521 5500 8080
 HEALTHCHECK --interval=1m --start-period=5m CMD $SCRIPTS_DIR/$MANAGE_ORACLE -h >/dev/null || exit 1
 CMD exec $DEBUG $SCRIPTS_DIR/$MANAGE_ORACLE
