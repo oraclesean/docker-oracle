@@ -5,6 +5,7 @@
 .dockerignore
 .gitignore
 #*/install/patches/0*
+/config/.mos
 /demos
 /docker-images
 /docker-oracle
