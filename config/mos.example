@@ -1,3 +1,0 @@
-# Create a MOS credential file, ./config/.mos, with the following two fields:
-mosUser='your_email@company.com'
-mosPass='Your-MOS-Password'

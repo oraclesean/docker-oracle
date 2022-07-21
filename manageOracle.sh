@@ -141,6 +141,21 @@ configENV() {
   then yum -y install $RPM_SUPPLEMENT
   fi
 
+  # Add option to add systemd support to the image (for AHF/TFA)
+    if [ -n "$SYSTEMD" ]
+  then yum -y install systemd
+       cd /lib/systemd/system/sysinit.target.wants
+        for i in *
+         do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i
+       done
+       rm -f /etc/systemd/system/{getty,graphical,local-fs,remote-fs,sockets,sysinit,system-update,systemd-remount}.target.wants/*
+       rm -f /lib/systemd/system/{anaconda,basic,local-fs,multi-user}.target.wants/*
+       rm -f /lib/systemd/system/sockets.target.wants/{*initctl*,*udev*}
+       rm -rf /var/cache/yum
+       sync
+       systemctl set-default multi-user.target
+  fi
+
   yum clean all
 
   mkdir -p {"$INSTALL_DIR","$SCRIPTS_DIR"} || error "Failure creating directories."
@@ -164,7 +179,7 @@ configDBENV() {
 checkSum() {
   # $1 is the file name
   # $2 is the md5sum
-    if [ "$(type md5sum 2>/dev/null)" ] && [ ! "$(md5sum "$1" | awk '{print $1}')" == "$2" ]
+    if [ -z "$FILE_MD5SUM" ] && [ "$(type md5sum 2>/dev/null)" ] && [ ! "$(md5sum "$1" | awk '{print $1}')" == "$2" ]
   then error "Checksum for $1 did not match"
   fi
 }
@@ -212,6 +227,50 @@ setSudo() {
   fi
 }
 
+downloadPatch() {
+  local __patch_id=$1
+  local __patch_dir=$2
+  local __patch_file=$3
+  local __platform_id=${4:-226P}
+  local __cookie="/home/oracle/.cookie"
+  local __patch_list="/home/oracle/.mos"
+  local __netrc="/home/oracle/.netrc"
+  local __curl_flags="-sS --netrc-file $__netrc --cookie-jar $__cookie --connect-timeout 3 --retry 5"
+
+    if [ ! -f "$__netrc" ]
+  then error "The MOS credential file doesn't exist"
+  fi
+  # Install curl if it isn't present.
+  command -v curl >/dev/null 2>&1 || yum install -y curl
+
+  # Log in to MOS if there isn't already a cookie file.
+    if [ ! -f "$__cookie" ]
+  then sudo su - oracle -c "curl $__curl_flags \"https://updates.oracle.com/Orion/Services/download\" >/dev/null" || error "MOS login failed"
+  fi
+  # Set ownership of the patch directory.
+    if [ "$(stat -c "%G" $__patch_dir)" != "$(id -gn oracle)" ]
+  then chown oracle:$(id -gn oracle) "$__patch_dir" || error "Error changing ownership of $__patch_dir"
+  fi
+  # Get the list of available patches.
+  sudo su - oracle -c "curl $__curl_flags -L --location-trusted \"https://updates.oracle.com/Orion/SimpleSearch/process_form?search_type=patch&patch_number=${__patch_id}&plat_lang=${__platform_id}\" -o $__patch_list" || error "Error downloading the patch list"
+  # Loop over the list of patches that resolve to a URL containing the patch file and get the link.
+   for link in $(grep -e "https.*$__patch_file" "$__patch_list" | sed -e "s/^.*\href[^\"]*\"//g;s/\".*$//g")
+    do 
+         if [ "$link" ]
+       then # Download newer/updated versions only
+              if [ -f "$__patch_dir/$__patch_file" ]
+            then local __curl_flags="$__curl_flags -z $__patch_dir/$__patch_file"
+            fi
+            # Download the patch via curl (wget doesn't have an option to perform timestamp checks when naming the output file).
+            local __patch_bytes=$(sudo su - oracle -c "curl -Rk $__curl_flags -L --location-trusted \"$link\" -o $__patch_dir/$__patch_file -w '%{size_download}\n'") || error "Error downloading patch $__patch_id"
+              if [ "$__patch_bytes" -eq 0 ]
+            then echo "Server timestamp is not newer - patch $__patch_id was not downloaded"
+            fi
+       else warn "No download available for patch $__patch_id using $link"
+       fi
+  done
+}
+
 installPatch() {
   # $1 is the patch type (patch, opatch)
   # $2 is the version
@@ -222,9 +281,17 @@ installPatch() {
          if [ -f "$manifest" ]
        then manifest="$(find $INSTALL_DIR -maxdepth 1 -name "manifest*" 2>/dev/null)"
             # Allow manifest to hold version-specific (version = xx.yy) and generic patches (version = xx) and apply them in order.
-            grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\b${1}\b[[:blank:]]*\(${__major_version}[[:blank:]]\|${__minor_version}\)" $manifest | awk '{print $5,$2}' | while read patchid install_file
-
+            grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\b${1}\b[[:blank:]]*\(${__major_version}[[:blank:]]\|${__minor_version}[[:blank:]]\)" $manifest | awk '{print $5,$2,$1}' | while read patchid install_file checksum
                do
+                  # If there's a credential file and either:
+                  # ...the patch file isn't present
+                  # ...or the FORCE_PATCH flag matches the patch type (all, opatch, patch) or the patch ID
+                  # ...the checksum in the patch manifest doesn't match the file
+                  local __checksum_result=$(checkSum "$INSTALL_DIR/patches/$install_file" "$checksum")
+                    
+                    if [[ -f "/home/oracle/.netrc" && ( ! -f "$INSTALL_DIR/patches/$install_file" || "$(echo $FORCE_PATCH | grep -ci -e "\b$1\b" -e "\b$patchid\b" -e "\ball\b")" -eq 1 ) || "$__checksum_result" -ne 0 ]]
+                  then downloadPatch $patchid $INSTALL_DIR/patches $install_file
+                  fi
                     if [ -f "$INSTALL_DIR/patches/$install_file" ]
                   then case $1 in
                        opatch) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/patches/$install_file" || error "An incorrect version of OPatch was found (version, architecture or bit mismatch)" ;;
@@ -953,6 +1020,11 @@ while getopts ":ehOpPRU" opt; do
 trap _sigint SIGINT
 trap _sigterm SIGTERM
 trap _sigkill SIGKILL
+
+  if [ -n "$SYSTEMD" ]
+then echo "Init:"
+     /usr/bin/init
+fi
 
 # Check whether container has enough memory
   if [ -f /sys/fs/cgroup/cgroup.controllers ]

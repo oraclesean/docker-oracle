@@ -6,6 +6,7 @@ ORACLE_EDITION=${2:-EE}
 TAG=${3:-7-slim}
 SOURCE=${4:-oraclelinux}
 DB_REPO=${5:-oraclesean/db}
+MOS_SECRET=${6:-$PWD/config/.netrc}
 
 . ./functions.sh
 
@@ -95,7 +96,14 @@ getVersion() {
        *)       error "Invalid version ($ORACLE_VERSION) provided" ;;
   esac
 
-  OEL_IMAGE="${SOURCE}:${TAG}-${PREINSTALL_TAG}"
+    if [ -n "$SYSTEMD" ]
+  then local __tag="${TAG}-sysd"
+       DB_REPO="${DB_REPO}-sysd"
+       systemd="--build-arg SYSTEMD=Y"
+       SYSTEMD_VOLUME="VOLUME [ \"/sys/fs/cgroup\" ]"
+  else local __tag="$TAG"
+  fi
+  OEL_IMAGE="${SOURCE}:${__tag}-${PREINSTALL_TAG}"
 }
 
 getImage() {
@@ -110,7 +118,13 @@ setBuildKit() {
 
     if [ "$major_version" -gt 18 ] || [ "$major_version" -eq 18 -a "$minor_version" -gt 9 ]
   then BUILDKIT=1
+         if [ -f "$MOS_SECRET" ]
+       then MOS_SECRET="--mount=type=secret,id=netrc,mode=0600,uid=54321,gid=54321,dst=/home/oracle/.netrc"
+            secrets="--secret id=netrc,src=./config/.netrc"
+       else MOS_SECRET=""
+       fi
   else BUILDKIT=0
+       MOS_SECRET=""
   fi
 }
 
@@ -167,6 +181,7 @@ processDockerfile() {
               FROM_OEL_BASE \
               INSTALL_RESPONSE_ARG \
               MIN_SPACE_GB_ARG \
+              MOS_SECRET \
               OEL_IMAGE \
               ORACLE_BASE_CONFIG_ARG \
               ORACLE_BASE_CONFIG_ENV \
@@ -184,7 +199,8 @@ processDockerfile() {
               ORACLE_VERSION \
               PDB_COUNT_ARG \
               PDB_COUNT_ENV \
-              PREINSTALL_TAG
+              PREINSTALL_TAG \
+              SYSTEMD_VOLUME
            do REPIFS=$IFS
               IFS=
               replaceVars "$1" "$var"
@@ -203,13 +219,19 @@ getEdition
 setBuildKit
 
 # Set build options
-options="--force-rm=true --no-cache=true" # --progress=plain
+#options="--force-rm=true --no-cache=true" # --progress=plain
+options="--force-rm=true --no-cache=true --progress=plain"
 
 # Set build arguments
 arguments=""
   if [ -n "$RPM_LIST" ]
 then rpm_list="--build-arg RPM_LIST=$RPM_LIST"
 fi
+
+## Set systemd options
+#  if [ -n "$SYSTEMD" ]
+#then systemd="--build-arg SYSTEMD=Y"
+#fi
 
   if [ -z "$(getImage)" ]
 then # There is no base image
@@ -220,7 +242,7 @@ then # There is no base image
      processDockerfile $dockerfile
 
      # Run the build
-     DOCKER_BUILDKIT=$BUILDKIT docker build $options $arguments $rpm_list \
+     DOCKER_BUILDKIT=$BUILDKIT docker build $options $arguments $rpm_list $systemd \
                               --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                               -t $OEL_IMAGE \
                               -f $dockerfile . && rm $dockerfile $dockerignore
@@ -240,7 +262,7 @@ else addException "*.${ORACLE_VERSION}.rsp" asset
 fi
 processManifest ignore 
 
-DOCKER_BUILDKIT=$BUILDKIT docker build $options $arguments \
+DOCKER_BUILDKIT=$BUILDKIT docker build $options $arguments $secrets \
                          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                          -t ${DB_REPO}:${ORACLE_VERSION}-${ORACLE_EDITION} \
                          -f $dockerfile . && rm $dockerfile $dockerignore

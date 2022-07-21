@@ -6,6 +6,7 @@
 .gitignore
 #*/install/patches/0*
 /config/.mos
+/config/.netrc
 /demos
 /docker-images
 /docker-oracle
