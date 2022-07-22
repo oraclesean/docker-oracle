@@ -38,6 +38,23 @@ To build a database image, run `buildDBImage.sh` and pass optional values for ve
 Images created by the script are named as: `[repository]:[version]-[edition]`
 It additionally creates a version-specific Linux image: `[source]-[tag]-[base_version]` where the base version is 11g, 12.1, 12.2, 18c, 19c, or 21c. This Linux image includes the database prerequisites for the given version and makes building multiple database images for the same database version faster. The majority of the build time is spent applying prerequisite RPMs. The build understands if a version-ready image is present and uses it.
 
+## FORCE_PATCH and `.netrc`
+When a `'.netrc` file is present, the `FORCE_PATCH` build argument enables patch downloads from My Oracle Support. Patches are downloaded when:
+- patches listed in the manifest aren't present in the build context (not added to the `./database/patches` directory)
+- the checksum of a patch doesn't match the value in the manifest
+- the `FORCE_PATCH` argument matches the patch type
+- the `FORCE_PATCH` argument includes the numeric patch ID
+
+`FORCE_PATCH` may have multiple options, separated by commas:
+- `all`: Download all patches listed in the manifest.
+- `opatch`: Download the latest version of `opatch`.
+- `patch`: Download patches but not `opatch`.
+- Patch ID: The numeric patch ID of patches to download.
+
+Pass the FORCE_PATCH value to `docker build` as `--build-arg FORCE_PATCH=<value_1>(,<value_2>,<value_n>)`
+
+The `.netrc` file is passed to the build process in an intermediate stage as a build secret. It is not copied to the final database image.
+
 ## TODO:
 - Replace positional options with flags
 - Expand customizations
@@ -131,10 +148,13 @@ Additional template files exist in this directory (I will eventually move them t
   - `init.ora.tmpl`
 
 - Environment configurations. Used to set up the interactive environment in the container. Each has a specific function:
-- `env.tmpl`: Used to build `~oracle/.bashrc`. Pay attention to escaping (`\`) on variables, there to support multi-home and multi-SID environments.
-- `login.sql.tmpl`: Used to create a `login.sql` file under `$SQLPATH` that formats and customizes SQLPlus output.
-- `rlwrap.tmpl`: If `rlwrap` is present in the environment, adds aliases for `sqlplus`, `rman`, and dgmgrl` to the shell.
- 
+  - `env.tmpl`: Used to build `~oracle/.bashrc`. Pay attention to escaping (`\`) on variables, there to support multi-home and multi-SID environments.
+  - `login.sql.tmpl`: Used to create a `login.sql` file under `$SQLPATH` that formats and customizes SQLPlus output.
+  - `rlwrap.tmpl`: If `rlwrap` is present in the environment, adds aliases for `sqlplus`, `rman`, and dgmgrl` to the shell.
+
+- Credential files:
+  - `.netrc`: MOS login credentials. See the netrc.example file in this directory for format. Adding a `netrc` file allows the build process to download patches from MOS. See the FORCE_PATCH build arguement for more information.
+
 ## `./database` and `./database/patches`
 **All** database and patch files go here. I redesigned the file structure of this repo in March 2022 to use a common directory for all software. Eliminating versioned subdirectories simplified file management and eliminated file duplication.
 
