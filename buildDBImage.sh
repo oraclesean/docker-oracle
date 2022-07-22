@@ -264,5 +264,6 @@ processManifest ignore
 
 DOCKER_BUILDKIT=$BUILDKIT docker build $options $arguments $secrets \
                          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+                         --build-arg FORCE_PATCH=opatch \
                          -t ${DB_REPO}:${ORACLE_VERSION}-${ORACLE_EDITION} \
                          -f $dockerfile . && rm $dockerfile $dockerignore
