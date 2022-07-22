@@ -261,7 +261,7 @@ downloadPatch() {
               if [ -f "$__patch_dir/$__patch_file" ]
             then local __curl_flags="$__curl_flags -z $__patch_dir/$__patch_file"
             fi
-            # Download the patch via curl (wget doesn't have an option to perform timestamp checks when naming the output file).
+            # Download the patch via curl
             local __patch_bytes=$(sudo su - oracle -c "curl -Rk $__curl_flags -L --location-trusted \"$link\" -o $__patch_dir/$__patch_file -w '%{size_download}\n'") || error "Error downloading patch $__patch_id"
               if [ "$__patch_bytes" -eq 0 ]
             then echo "Server timestamp is not newer - patch $__patch_id was not downloaded"
