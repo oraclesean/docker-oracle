@@ -287,7 +287,7 @@ installPatch() {
                   # ...the patch file isn't present
                   # ...or the FORCE_PATCH flag matches the patch type (all, opatch, patch) or the patch ID
                   # ...the checksum in the patch manifest doesn't match the file
-                  local __checksum_result=$(checkSum "$INSTALL_DIR/patches/$install_file" "$checksum" >2/dev/null)
+                  local __checksum_result=$(checkSum "$INSTALL_DIR/patches/$install_file" "$checksum" 2>/dev/null)
                     
                     if [[ -f "/home/oracle/.netrc" && ( ! -f "$INSTALL_DIR/patches/$install_file" || "$(echo $FORCE_PATCH | grep -ci -e "\b$1\b" -e "\b$patchid\b" -e "\ball\b")" -eq 1 ) || "$__checksum_result" -ne 0 ]]
                   then downloadPatch $patchid $INSTALL_DIR/patches $install_file
