@@ -1152,7 +1152,7 @@ fi
 # Check database status
   if HealthCheck
 #  if [ "$?" -eq 0 ]
-then runUserScripts "$ORACLE_BASE"/scripts/setup
+then runUserScripts "$ORACLE_BASE"/scripts/startup
        if [ -n "$DB_UNQNAME" ]
      then msg="$ORACLE_SID with unique name $DB_UNQNAME"
      else msg="$ORACLE_SID"
