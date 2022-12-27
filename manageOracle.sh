@@ -4,7 +4,7 @@
 #                     Oracle Container Management                     #
 #                                                                     #
 # This script is used to perform all management functions for Oracle  #
-# database containers. The default action starts a databas, running   #
+# database containers. The default action starts a database, running  #
 # DBCA if none exists. Other options include:                         #
 #                                                                     #
 #    -e: Configure the environment (deprecated)                       #
@@ -115,6 +115,8 @@ getPreinstall() {
        18*)   pre="oracle-database-preinstall-18c" ;;
        19*)   pre="oracle-database-preinstall-19c" ;;
        21*)   pre="oracle-database-preinstall-21c" ;;
+       23*)   pre="oracle-database-preinstall-21c" ;;
+#       23*)   pre="oracle-database-preinstall-23c-1.0-1.el8.x86_64.rpm" ;;
        *)     pre="oracle-database-preinstall-19c" ;;
   esac
 
@@ -168,8 +170,8 @@ configDBENV() {
 
   mkdir -p {"$ORACLE_INV","$ORACLE_HOME","$__target_home","$ORADATA"/{dbconfig,fast_recovery_area},"$ORACLE_BASE"/{admin,scripts/{setup,startup}}} || error "Failure creating directories."
    case $ORACLE_VERSION in
-        18.*|19.*|21.*) if [ "${ROOH^^}" = "ENABLE" ]; then mkdir -p "$ORACLE_BASE"/{dbs,homes} || error "Failure creating directories."; fi
-                        ;;
+        18.*|19.*|2*) if [ "${ROOH^^}" = "ENABLE" ]; then mkdir -p "$ORACLE_BASE"/{dbs,homes} || error "Failure creating directories."; fi
+                      ;;
    esac
   chown -R oracle:oinstall "$INSTALL_DIR" "$SCRIPTS_DIR" "$ORACLE_INV" "$ORACLE_BASE" "$ORADATA" "$__target_home" || error "Failure changing directory ownership."
   ln -s "$ORACLE_BASE"/scripts /docker-entrypoint-initdb.d || error "Failure setting Docker entrypoint."
@@ -186,10 +188,10 @@ checkSum() {
 
 setBase() {
   case $ORACLE_VERSION in
-       18*|19*|21*) export ORACLE_BASE_CONFIG="$($ORACLE_HOME/bin/orabaseconfig)/dbs"
-                    export ORACLE_BASE_HOME="$($ORACLE_HOME/bin/orabasehome)" ;;
-                 *) export ORACLE_BASE_CONFIG="$ORACLE_HOME/dbs"
-                    export ORACLE_BASE_HOME="$ORACLE_HOME" ;;
+       18*|19*|2*) export ORACLE_BASE_CONFIG="$($ORACLE_HOME/bin/orabaseconfig)/dbs"
+                   export ORACLE_BASE_HOME="$($ORACLE_HOME/bin/orabasehome)" ;;
+                *) export ORACLE_BASE_CONFIG="$ORACLE_HOME/dbs"
+                   export ORACLE_BASE_HOME="$ORACLE_HOME" ;;
   esac
   export TNS_ADMIN=$ORACLE_BASE_HOME/network/admin
 }
@@ -307,7 +309,7 @@ installPatch() {
              done
        else error "The manifest file was not found"
        fi
-  else error "The patch directory was not found"
+  else warn "The patch directory was not found" #error "The patch directory was not found"
   fi
 }
 
@@ -427,14 +429,14 @@ installOracle() {
        grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\bdatabase\b.*${ORACLE_EDITION::2}" $manifest | awk '{print $1,$2}' | while read checksum install_file
           do checkSum "$INSTALL_DIR/$install_file" "$checksum"
              case $ORACLE_VERSION in
-                  18.*|19.*|21.*) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/$install_file" ;;
-                               *) sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/$install_file" ;;
+                  18.*|19.*|2*) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/$install_file" ;;
+                             *) sudo su - oracle -c "unzip -oq -d $INSTALL_DIR $INSTALL_DIR/$install_file" ;;
              esac
        done
        # Run the installation
        case $ORACLE_VERSION in
-            18.*|19.*|21.*) sudo su - oracle -c "$__oracle_home/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignorePrereqFailure" ;;
-                         *) sudo su - oracle -c "$INSTALL_DIR/database/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignoresysprereqs -ignoreprereq" ;;
+            18.*|19.*|2*) sudo su - oracle -c "$__oracle_home/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignorePrereqFailure" ;;
+                       *) sudo su - oracle -c "$INSTALL_DIR/database/runInstaller -silent -force -waitforcompletion -responsefile $INSTALL_DIR/$INSTALL_RESPONSE -ignoresysprereqs -ignoreprereq" ;;
        esac
        set -e
 
@@ -471,7 +473,8 @@ echo "End of binary installation"
   fi # End of software binary installation
 
   # Check for OPatch
-  installPatch opatch "${ORACLE_VERSION::2}"
+#  installPatch opatch "${ORACLE_VERSION::2}"
+  installPatch opatch "${ORACLE_VERSION}"
   # Check for patches
   installPatch patch "${ORACLE_VERSION}"
   # Print a patch summary
@@ -521,7 +524,7 @@ echo "End of binary installation"
 
   # Enable read-only Oracle Home:
   case $ORACLE_VERSION in
-       18.*|19.*|21.*) if [ "${ROOH^^}" = "ENABLE" ]; then sudo su - oracle -c "$__oracle_home/bin/roohctl -enable"; unset ROOH; fi ;;
+       18.*|19.*|2*) if [ "${ROOH^^}" = "ENABLE" ]; then sudo su - oracle -c "$__oracle_home/bin/roohctl -enable"; unset ROOH; fi ;;
   esac
 
   # Revert pam.d sudo changes:
@@ -598,7 +601,8 @@ checkMode() {
 }
 
 setupDG() {
-  dbrole=$1 
+  dbrole=$1
+  local __version=$(echo "$ORACLE_VERSION" | cut -d. -f1)
   setBase
     if [ "$dbrole" = "PRIMARY" ]
   then "$ORACLE_HOME"/bin/sqlplus / as sysdba @"$SETUP_DIR"/"$SETUP_PRIMARY".sql
@@ -613,14 +617,20 @@ setupDG() {
        cat "$SETUP_DIR"/"$BROKER_SCRIPT" | "$ORACLE_HOME"/bin/dgmgrl /
        sleep 60
        cat "$SETUP_DIR"/"$BROKER_CHECKS" | "$ORACLE_HOME"/bin/dgmgrl /
-  else createAudit "$DB_UNQNAME"
+  else mkdir -p "$ORADATA"/"$ORACLE_SID"
+       mkdir -p "$ORACLE_BASE"/fast_recovery_area/"$ORACLE_SID"
+       createAudit "$DB_UNQNAME"
        mkdir -p "$ORACLE_BASE"/diag/rdbms/"${DB_UNQNAME,,}"/"$ORACLE_SID"/trace
        touch "$ORACLE_BASE"/diag/rdbms/"${DB_UNQNAME,,}"/"$ORACLE_SID"/trace/alert_"$ORACLE_SID".log
        printf "%s:%s:N\n" "$ORACLE_SID" "$ORACLE_HOME" > /etc/oratab
        # Create a pfile for startup of the DG replica
        copyTemplate "$INSTALL_DIR"/init.ora.tmpl "$ORACLE_BASE_CONFIG"/init"$ORACLE_SID".ora replace
        # Create a password file
-       "$ORACLE_HOME"/bin/orapwd file="$ORACLE_BASE_CONFIG"/orapw"$ORACLE_SID" force=yes format=12 <<< $(echo "$ORACLE_PWD")
+       case "$__version" in
+            11) __option="force=y" ;;
+            *)  __option="force=yes format=12" ;;
+       esac
+       "$ORACLE_HOME"/bin/orapwd file="$ORACLE_BASE_CONFIG"/orapw"$ORACLE_SID" "$__option" <<< $(echo "$ORACLE_PWD")
        echo "startup nomount pfile='${ORACLE_BASE_CONFIG}/init${ORACLE_SID}.ora';" | "$ORACLE_HOME"/bin/sqlplus / as sysdba
        # Start listener
        startListener
@@ -639,13 +649,14 @@ setupDG() {
 runDBCA() {
   local __version=$(echo "$ORACLE_VERSION" | cut -d. -f1)
   # Default init parameters
-  local INIT_PARAMS=${INIT_PARAMS:-db_create_file_dest=${ORADATA},db_create_online_log_dest_1=${ORADATA},db_recovery_file_dest=${ORADATA}/fast_recovery_area,audit_trail=none,audit_sys_operations=false}
+#  local INIT_PARAMS=${INIT_PARAMS:-db_create_file_dest=${ORADATA},db_create_online_log_dest_1=${ORADATA},db_recovery_file_dest=${ORADATA}/fast_recovery_area,audit_trail=none,audit_sys_operations=false}
+  local INIT_PARAMS=${INIT_PARAMS:-db_recovery_file_dest=${ORADATA}/fast_recovery_area,audit_trail=none,audit_sys_operations=false}
     if ! [[ $INIT_PARAMS =~ = ]]
   then error "Invalid value provided for INIT_PARAMS: $INIT_PARAMS"
   fi
 
   # 21c database check - PDB is mandatory and Read-Only Home is the default
-    if [ "$__version" == "21" ]
+    if [ "$__version" == "21" ] || [ "$__version" == "23" ]
   then # Version 21; check PDB_LIST and ORACLE_PDB and assign a default if not set:
          if [ -z "$PDB_LIST" ] && [ -z "$ORACLE_PDB" ]
        then ORACLE_PDB=${ORACLE_PDB:-ORCLPDB}
@@ -962,14 +973,16 @@ runUserScripts() {
   elif [ -d "$SCRIPTS_ROOT" ] && [ -n "$(ls -A "$SCRIPTS_ROOT")" ]
   then # Check that directory exists and it contains files
        logger B "${FUNCNAME[0]}: Running user scripts"
-        for f in "$SCRIPTS_ROOT"/*
-         do
-            case "$f" in
-                 *.sh)     logger ba "${FUNCNAME[0]}: Script: $f"; . "$f" ;;
-                 *.sql)    logger ba "${FUNCNAME[0]}: Script: $f"; echo "exit" | "$ORACLE_HOME"/bin/sqlplus -s "/ as sysdba" @"$f" ;;
-                 *)        logger ba "${FUNCNAME[0]}: Ignored file $f" ;;
-            esac
-       done
+#        for f in "$SCRIPTS_ROOT"/*
+       while IFS= read -r f
+          do
+             case "$f" in
+                  *.sh)     logger ba "${FUNCNAME[0]}: Script: $f"; . "$f" ;;
+                  *.sql)    logger ba "${FUNCNAME[0]}: Script: $f"; echo "exit" | "$ORACLE_HOME"/bin/sqlplus -s "/ as sysdba" @"$f" ;;
+                  *)        logger ba "${FUNCNAME[0]}: Ignored file $f" ;;
+             esac
+#        done
+        done < <(find $SCRIPTS_ROOT/*.{sql,sh} 2>/dev/null | sort)
 
        logger A "${FUNCNAME[0]}: User scripts complete"
   fi
