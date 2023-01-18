@@ -150,9 +150,11 @@ addException() {
 }
 
 processManifest() {
-    if [ -f ./config/manifest."$ORACLE_BASE_VERSION" ]
+#    if [ -f ./config/manifest."$ORACLE_BASE_VERSION" ]
+    if [ -f ./config/manifest ]
   then
-       grep -ve "^#" ./config/manifest."$ORACLE_BASE_VERSION" | awk '{print $1,$2,$3,$4,$5}' | while IFS=" " read -r checksum filename filetype version extra
+#       grep -ve "^#" ./config/manifest."$ORACLE_BASE_VERSION" | awk '{print $1,$2,$3,$4,$5}' | while IFS=" " read -r checksum filename filetype version extra
+       grep -ve "^#" ./config/manifest | awk '{print $1,$2,$3,$4,$5}' | while IFS=" " read -r checksum filename filetype version extra
           do
                if [ "$filetype" == "database" ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/"$filename" ] && [ -z "$edition" ]
              then case $1 in
