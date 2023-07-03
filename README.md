@@ -1,8 +1,5 @@
-# Update
-May 5 2022: I'm in the process of updating the documentation to reflect changes to operation/architecture in this repo. Please bear with me as I make these changes!
-
-# docker-oracle
-A repository of Docker image builds for creating Oracle databases. This repo replaces the other Docker repos I maintain. 
+# cloud-native-oracle
+A repository of container image builds for Oracle databases, with support for Intel, Apple Silicon, and ARM processors.
 
 Jump to a section:
 - [Build an image](#build-an-image)
@@ -18,7 +15,7 @@ Jump to a section:
 # Build an image
 One [reason behind this repo](#why-this-repo) was reducing duplication. I wanted one set of scripts (not one-per-version) and less maintenance. That created a need for more than one Dockerfile (one per version) because building 11g and 21c images is *mostly* boilerplate, but not entirely, and Dockerfiles don't take variables. This repo solves that by taking boilerplate Dockerfile templates, processing them to substitute variables, and using them for the build. Named Dockerfiles enable matching .dockerignore files to limit context. But, every version still needs a unique Dockerfile. Rather than polluting the directory with versioned Dockerfiles run directly with `docker build` I'm hiding the complexity with temporary files and a shell script. Version and edition information passed to the script generates temporary Dockerfile and .dockerignore files, runs `docker build`, then deletes the temporary file.
 
-This is a temporary workaround. Dockerfile 1.4 and Buildx v0.8+, introduced in May 2022, add control over build context. I'm working on integrating the new capability. Until then, `buildDBImage.sh` manages Dockerfiles and builds.
+This is a temporary workaround. I'm working on integrating new capabilities but until then, `buildDBImage.sh` manages Dockerfiles and builds.
 
 ## Build options and examples
 To build a database image, run `buildDBImage.sh` and pass optional values for version, edition, tag, source, and repository name:
@@ -26,17 +23,59 @@ To build a database image, run `buildDBImage.sh` and pass optional values for ve
 ./buildDBImage.sh [version] [edition] [tag] [source] [repository]
 ```
 
-- `version`: The database version to build. The value must match a version in a manifest file. (Default: `19.14`)
+- `version`: The database version to build. The value must match a version in a manifest file. (Default: `19.19`)
 - `edition`: The edition to build. Acceptable values:
   - `EE`: Enterprise Edition
   - 'SE`: Standard Edition, Standard Edition 2
   - `XE`: Express Edition (Only for versions 11.2.0.2, 18.4)
-- `tag`: The base OEL version. Options are `7-slim` or `8-slim`. (Default: `7-slim`)
+- `tag`: The base OEL version. Options are `7-slim` or `8-slim`. (Default: `8-slim`)
 - `source`: The OEL source. (Default: `oraclelinux`)
 - `repository`: The image repository name assignment. (Default: `oraclesean/db`)
 
 Images created by the script are named as: `[repository]:[version]-[edition]`
 It additionally creates a version-specific Linux image: `[source]-[tag]-[base_version]` where the base version is 11g, 12.1, 12.2, 18c, 19c, or 21c. This Linux image includes the database prerequisites for the given version and makes building multiple database images for the same database version faster. The majority of the build time is spent applying prerequisite RPMs. The build understands if a version-ready image is present and uses it.
+
+### Build example: Macs with Apple Silicon/ARM Systems
+The only database currently supported for ARM architectures is Oracle 19.19. 
+- [Download the Oracle Database 19c for LINUX ARM (aarch64)](https://www.oracle.com/database/technologies/oracle-database-software-downloads.html#db_ee) zip file and place it in the `database` subdirectory. Do not unzip the file.
+- From the base directory, run the `buildDBImage.sh` script:
+```
+./buildDBImage.sh
+# or:
+./buildDBImage.sh 19.19 EE
+```
+This will create two images
+- A "database-ready" Oracle Enterprise Linux image, with `git`, `less`, `strace`, `tree`, `vi`, `which`, `bash-completion`, and `rlwrap` installed.
+  - Change these by editing the `RPM_LIST` in `templates/oraclelinux.dockerfile`, or pass a build argument. Note that you *must* include `hostname` and `file` on `oraclelinux:8-slim` builds.
+- A database image with a default `ORACLE_BASE` under `/u01/app/oracle` and an `ORACLE_HOME` under `$ORACLE_BASE/product/19c/dbhome_1`.
+  - Change these by editing the entries in `templates/db.dockerfile`, or pass build arguments for each parameter.
+
+### Build example: Intel-based systems (Linux, Mac, Windows)
+All database versions are supported.
+- Download the appropriate installation file and place it in the `database` subdirectory.
+- Download any patches to be installed and place them in the `database/patches` subdirectory.
+- Update the `config/manifest` file if necessary. See the `README` file under `database` for details on formatting.
+- From the base directory, run the `buildDBImage.sh` script, passing the appropriate database version, edition, and OS version:
+```
+# Oracle 11g:
+./buildDBImage.sh 11.2.0.4 EE 7-slim
+# Oracle 12.1:
+./buildDBImage.sh 12.1.0.1 EE 7-slim
+# Oracle 12.2:
+./buildDBImage.sh 12.2 EE 7-slim
+# Oracle 18c:
+./buildDBImage.sh 18.3 EE 7-slim
+# Oracle 19c:
+./buildDBImage.sh 19 EE
+# or, to build a specific version:
+./buildDBImage.sh <Release Update> EE
+# ... where <Release Update> is the RU to apply atop the base 19.3
+# Oracle 21c:
+./buildDBImage.sh 21 EE
+# or, to build a specific version:
+./buildDBImage.sh <Release Update> EE
+# ... where <Release Update> is the RU to apply atop the base 21.3
+```
 
 ## FORCE_PATCH and `.netrc`
 When a `'.netrc` file is present, the `FORCE_PATCH` build argument enables patch downloads from My Oracle Support. Patches are downloaded when:
@@ -54,16 +93,6 @@ When a `'.netrc` file is present, the `FORCE_PATCH` build argument enables patch
 Pass the FORCE_PATCH value to `docker build` as `--build-arg FORCE_PATCH=<value_1>(,<value_2>,<value_n>)`
 
 The `.netrc` file is passed to the build process in an intermediate stage as a build secret. It is not copied to the final database image.
-
-## TODO:
-- Replace positional options with flags
-- Expand customizations
-- Add flexibility to pass `--build-arg`s to the script/image
-- Add a "Create Dockerfile" option (don't run the build)
-- Add Dockerfile naming capability
-- Add a help menu and error dialogs
-- Integrate secrets
-- More...
 
 # Run a container
 Run database containers as you would normally, using `docker run [options] [image-name]`.
@@ -91,6 +120,245 @@ Create a container database with a default SID and three PDB named mypdb[1,2,3]:
 Create a container database with custom SID and named PDB:
 `docker run -d -e ORACLE_SID=mydb -e PDB_LIST="test,dev,prod" IMG_NAME`
 
+Users running ARM/Apple Silicon do not need to do anything differently. On ARM/Apple Silicon, the build process creates an architecture-native image that runs without needing any special commands or virtualization (Colima, etc).
+
+# Example for Apple Silicon
+This is an example of the output seen on a 2021 Apple MacBook Pro (M1, 16GB RAM, Ventura 13.4.1, Docker version 23.0.0, build e92dd87c32):
+```
+
+# ./buildDBImage.sh
+[+] Building 51.6s (8/8) FINISHED                                                   docker:desktop-linux
+ => [internal] load .dockerignore                                                                   0.0s
+ => => transferring context: 2B                                                                     0.0s
+ => [internal] load build definition from Dockerfile.oraclelinux.202307031409.jTxd                  0.0s
+ => => transferring dockerfile: 1.55kB                                                              0.0s
+ => [internal] load metadata for docker.io/library/oraclelinux:8-slim                               1.3s
+ => [internal] load build context                                                                   0.0s
+ => => transferring context: 45.06kB                                                                0.0s
+ => CACHED [1/3] FROM docker.io/library/oraclelinux:8-slim@sha256:0226d80b442e93f977753e1d          0.0s
+ => => resolve docker.io/library/oraclelinux:8-slim@sha256:0226d80b442e93f977753e1d269c8ec          0.0s
+ => [2/3] COPY manageOracle.sh /opt/scripts/                                                        0.0s
+ => [3/3] RUN chmod ug+x /opt/scripts/manageOracle.sh &&      /opt/scripts/manageOracle.sh         48.7s
+ => exporting to image                                                                              1.5s
+ => => exporting layers                                                                             1.5s
+ => => writing image sha256:6cdb5ddeb9d8ffbfcaeba0cb1fad0c003dbffc3cd77b204a8ddc60292e184b          0.0s
+ => => naming to docker.io/library/oraclelinux:8-slim-19c                                           0.0s
+oraclelinux:8-slim-19c
+[+] Building 193.8s (21/21) FINISHED                                                docker:desktop-linux
+ => [internal] load .dockerignore                                                                   0.0s
+ => => transferring context: 2B                                                                     0.0s
+ => [internal] load build definition from Dockerfile.db.202307031410.NUni                           0.0s
+ => => transferring dockerfile: 5.11kB                                                              0.0s
+ => resolve image config for docker.io/docker/dockerfile:1.4                                        0.9s
+ => CACHED docker-image://docker.io/docker/dockerfile:1.4@sha256:9ba7531bd80fb0a858632727c          0.0s
+ => [internal] load metadata for docker.io/library/oraclelinux:8-slim-19c                           0.0s
+ => [db 1/6] FROM docker.io/library/oraclelinux:8-slim-19c                                          0.0s
+ => [internal] load build context                                                                  38.5s
+ => => transferring context: 2.42GB                                                                38.5s
+ => [db 2/6] COPY --chown=oracle:oinstall manageOracle.sh      /opt/scripts/                        0.6s
+ => [stage-1 2/9] COPY --chown=oracle:oinstall ./config/dbca.*        /opt/install/                 0.6s
+ => [stage-1 3/9] COPY --chown=oracle:oinstall ./config/*.tmpl        /opt/install/                 0.0s
+ => [db 3/6] COPY --chown=oracle:oinstall ./config/inst.*     /opt/install/                         0.0s
+ => [db 4/6] COPY --chown=oracle:oinstall ./config/manifest.* /opt/install/                         0.0s
+ => [stage-1 4/9] COPY --chown=oracle:oinstall manageOracle.sh         /opt/scripts/                0.0s
+ => [db 5/6] COPY --chown=oracle:oinstall ./database/         /opt/install/                         6.3s
+ => [db 6/6] RUN  chmod ug+x /opt/scripts/manageOracle.sh &&      /opt/scripts/manageOracl         98.9s
+ => [stage-1 5/9] COPY --chown=oracle:oinstall --from=db /u01/app/oraInventory  /u01/app/o          0.0s
+ => [stage-1 6/9] COPY --chown=oracle:oinstall --from=db /u01/app/oracle /u01/app/oracle           18.6s
+ => [stage-1 7/9] COPY --chown=oracle:oinstall --from=db /opt/oracle/oradata     /opt/orac          0.0s
+ => [stage-1 8/9] RUN  /opt/scripts/manageOracle.sh -R                                              0.5s
+ => [stage-1 9/9] WORKDIR /home/oracle                                                              0.0s
+ => exporting to image                                                                             17.6s
+ => => exporting layers                                                                            17.6s
+ => => writing image sha256:4874efbbfe1cfb271e314ed8d6d0773e5a270d1a0b789861af76e59d4b6f82          0.0s
+ => => naming to docker.io/oraclesean/db:19.19-EE                                                   0.0s
+```
+
+Total build time was 245.4 seconds. After building the image:
+```
+# docker images
+REPOSITORY      TAG          IMAGE ID       CREATED             SIZE
+oraclesean/db   19.19-EE     4874efbbfe1c   About an hour ago   5.87GB
+oraclelinux     8-slim-19c   6cdb5ddeb9d8   About an hour ago   690MB
+```
+
+The ARM image size is about 2GB smaller than its corresponding Intel-based image.
+
+Here's an example of running a network and container, with volumes defined for data, database logs, the audit directory, and a scripts directory.
+
+## Create a network (optional)
+This creates a network called `oracle-db`. This step is optional; if you elect to not create a network here, be sure to remove the network assignment from the `docker run` command.
+```
+docker network create oracle-db --attachable --driver bridge
+```
+
+## Set the container name and data path
+Set a name for the container and a path to mount bind volumes.
+```
+CONTAINER_NAME=ARM
+ORADATA=~/oradata
+```
+
+## Create volumes
+I cannot overemphasize the value of volumes for Oracle databases. They persist data outside the container and make data independent of the container itself. Putting volatile directories outside the container's filesystem improves performance. And, volumes don't "hide" data in the `/var/lib/docker` directory of the virtual machine. You have better visibility into space use, and you're far less likely to fill the VM's disk.
+
+## Create a script directory (optional)
+This creates a shared directory in the container for saving/sharing files between container and host. If you bypass this step, be sure to remove the corresponding definition from the `docker run` command later.
+```
+mkdir -p $ORADATA/scripts
+```
+
+## Create the audit, data, and diagnostic directories
+This creates separate subdirectories for each file type and bind mounts them to Docker volumes. Assigning them to Docker volumes means they're visible in the Docker Desktop tool, as well as through the CLI via `docker volume ls` and other commands.
+```
+ for dir in audit data diag
+  do mkdir -p $ORADATA/${CONTAINER_NAME}/${dir}
+     rm -fr $ORADATA/${CONTAINER_NAME}/${dir}/*
+     docker volume rm ${CONTAINER_NAME}_${dir} 2>/dev/null
+     docker volume create --opt type=none --opt o=bind \
+            --opt device=$ORADATA/${CONTAINER_NAME}/${dir} \
+            ${CONTAINER_NAME}_${dir}
+done
+```
+
+## Remove the container (if it already exists)
+If you created a container by the same name, remove it before recreating it.
+```
+docker rm -f $CONTAINER_NAME 2>/dev/null
+```
+
+## Create the container
+In the following command, I'm creating a container named `$CONTAINER_NAME`, then:
+- Mapping volumes for data (`/opt/oracle/oradata`), log data (`/u01/app/oracle/diag`), audit files (`/u01/app/oracle/admin`), and a shared directory for scripts (`/scripts`)
+- Assigning the container to a network called `oracle-db`
+- Setting the database SID
+- Setting the name of the PDB to ${CONTAINER_NAME}PDB1
+- Mapping port 8080 in the container to port 8080 on the host
+- Mapping port 1521 in the container to port 51521 on the host
+```
+docker run -d \
+       --name ${CONTAINER_NAME} \
+       --volume ${CONTAINER_NAME}_data:/opt/oracle/oradata \
+       --volume ${CONTAINER_NAME}_diag:/u01/app/oracle/diag \
+       --volume ${CONTAINER_NAME}_audit:/u01/app/oracle/admin \
+       --volume $ORADATA/scripts:/scripts \
+       --network oracle-db \
+       -e ORACLE_SID=${CONTAINER_NAME} \
+       -e ORACLE_PDB=${CONTAINER_NAME}PDB1 \
+       -p 8080:8080 \
+       -p 51521:1521 \
+       oraclesean/db:19.19-EE
+```
+
+Add or remove options as you see fit.
+
+## Monitor the database creation and logs
+View the database activity:
+```
+docker logs -f $CONTAINER_NAME
+```
+
+Sample output from a database:
+```
+# docker logs -f $CONTAINER_NAME
+
+# ----------------------------------------------------------------------------------------------- #
+  Oracle password for SYS, SYSTEM and PDBADMIN: HB#K_xhkwM_O10
+# ----------------------------------------------------------------------------------------------- #
+
+# ----------------------------------------------------------------------------------------------- #
+  runDBCA: Running DBCA for database ARM at 2023-07-03 20:16:05
+# ----------------------------------------------------------------------------------------------- #
+
+LSNRCTL for Linux: Version 19.0.0.0.0 - Production on 03-JUL-2023 20:16:05
+
+Copyright (c) 1991, 2023, Oracle.  All rights reserved.
+
+Starting /u01/app/oracle/product/19c/dbhome_1/bin/tnslsnr: please wait...
+
+TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+System parameter file is /u01/app/oracle/product/19c/dbhome_1/network/admin/listener.ora
+Log messages written to /u01/app/oracle/diag/tnslsnr/96bb65f2a1b7/listener/alert/log.xml
+Listening on: (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=EXTPROC1)))
+Listening on: (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=0.0.0.0)(PORT=1521)))
+
+Connecting to (DESCRIPTION=(ADDRESS=(PROTOCOL=IPC)(KEY=EXTPROC1)))
+STATUS of the LISTENER
+------------------------
+Alias                     LISTENER
+Version                   TNSLSNR for Linux: Version 19.0.0.0.0 - Production
+Start Date                03-JUL-2023 20:16:06
+Uptime                    0 days 0 hr. 0 min. 0 sec
+Trace Level               off
+Security                  ON: Local OS Authentication
+SNMP                      OFF
+Listener Parameter File   /u01/app/oracle/product/19c/dbhome_1/network/admin/listener.ora
+Listener Log File         /u01/app/oracle/diag/tnslsnr/96bb65f2a1b7/listener/alert/log.xml
+Listening Endpoints Summary...
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=ipc)(KEY=EXTPROC1)))
+  (DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=0.0.0.0)(PORT=1521)))
+Services Summary...
+Service "ARM" has 1 instance(s).
+  Instance "ARM", status UNKNOWN, has 1 handler(s) for this service...
+The command completed successfully
+# ----------------------------------------------------------------------------------------------- #
+  runDBCA: Creating container database ARM and 3 pluggable database(s) with name ARMPDB at 2023-07-03 20:16:06
+# ----------------------------------------------------------------------------------------------- #
+Prepare for db operation
+8% complete
+Copying database files
+31% complete
+Creating and starting Oracle instance
+32% complete
+36% complete
+40% complete
+43% complete
+46% complete
+Completing Database Creation
+51% complete
+54% complete
+Creating Pluggable Databases
+58% complete
+63% complete
+68% complete
+77% complete
+Executing Post Configuration Actions
+100% complete
+Database creation complete. For details check the logfiles at:
+ /u01/app/oracle/cfgtoollogs/dbca/ARM.
+Database Information:
+Global Database Name:ARM
+System Identifier(SID):ARM
+Look at the log file "/u01/app/oracle/cfgtoollogs/dbca/ARM/ARM.log" for further details.
+
+Pluggable database altered.
+
+Pluggable database altered.
+
+# ----------------------------------------------------------------------------------------------- #
+  runDBCA: DBCA complete at 2023-07-03 20:26:37
+# ----------------------------------------------------------------------------------------------- #
+
+# ----------------------------------------------------------------------------------------------- #
+  Database ARM with unique name ARM is open and available.
+# ----------------------------------------------------------------------------------------------- #
+
+# ----------------------------------------------------------------------------------------------- #
+  Tailing alert_ARM.log:
+2023-07-03T20:26:36.493063+00:00
+ARMPDB3(5):CREATE SMALLFILE TABLESPACE "USERS" LOGGING  DATAFILE  '/opt/oracle/oradata/ARM/ARMPDB3/users01.dbf' SIZE 5M REUSE AUTOEXTEND ON NEXT  1280K MAXSIZE UNLIMITED  EXTENT MANAGEMENT LOCAL  SEGMENT SPACE MANAGEMENT  AUTO
+ARMPDB3(5):Completed: CREATE SMALLFILE TABLESPACE "USERS" LOGGING  DATAFILE  '/opt/oracle/oradata/ARM/ARMPDB3/users01.dbf' SIZE 5M REUSE AUTOEXTEND ON NEXT  1280K MAXSIZE UNLIMITED  EXTENT MANAGEMENT LOCAL  SEGMENT SPACE MANAGEMENT  AUTO
+ARMPDB3(5):ALTER DATABASE DEFAULT TABLESPACE "USERS"
+ARMPDB3(5):Completed: ALTER DATABASE DEFAULT TABLESPACE "USERS"
+2023-07-03T20:26:37.882084+00:00
+alter pluggable database all open
+Completed: alter pluggable database all open
+alter pluggable database all save state
+Completed: alter pluggable database all save state
+```
+
+Database creation took about 10 minutes; note that this output is for a CDB with three Pluggable Databases (PDB).
+
 # Directory Structure
 Three subdirectories contain the majority of assets and configuration needed by images.
 
@@ -98,7 +366,7 @@ Three subdirectories contain the majority of assets and configuration needed by 
 Here you'll find version-specific files and configuration, including:
 - `dbca.<version>.rsp`: Every version of Oracle seems to introduce new options and features for Database Configuration Assistant (DBCA). Each version-specific file includes options with default and placeholder values. During database creation, the script replaces placeholders with values passed to the container at runtime via the `-e` option.
 - `inst.<version>.rsp`: The database install response files, like the DBCA response files, include default and placeholder values for customizing database installation for any version of Oracle. The script updates the placeholder values with those present in the Dockerfile or given to the build operation through a `--build-arg` option.
-- `manifest.<version>`: The manifest file includes information for all database and/or patch versions:
+- `manifest`: The manifest file includes information for all database and/or patch versions:
   ```
   # md5sum                          File name                                Type      Version  Other
   1858bd0d281c60f4ddabd87b1c214a4f  LINUX.X64_193000_db_home.zip             database  19       SE,EE
@@ -201,7 +469,6 @@ I build and run many Oracle databases in containers. There were things I didn't 
   - For CDB databases, control the number/naming of PDBs
   - Data Guard, Sharding, RAC, GoldenGate, upgrades, etc.
 
-# Legacy README:
 There is one script to handle all operations, for all editions and versions. This adds some complexity to the script (it has to accommodate peculiarities of every version and edition) but:
 - _For the most part_ these operations are identical across the board
 - One script in the root directory does everything and only one script needs maintenance
@@ -297,9 +564,6 @@ I recommend handling this as follows:
 - Set ORACLE_PDB explicitly in `docker run` even when using PDB_LIST. PDB_LIST is evaluated first so setting ORACLE_PDB sets the environment and PDB_LIST creates multiple pluggable databases. The default PDB should be first in the list and match ORACLE_PDB.
 - If you need multiple PDBs, use PDB_LIST instead of PDB_COUNT, and set ORACLE_PDB to the "default" PDB. Otherwise, the ORACLE_PDB value in non-interactive shells is the prefix and not a full/valid PDB name.
 
-# TODO
-- Remove sudo option for building containers. It's only used during software installation and isn't required in final images.
-
 # Glossary
 - APEX: Oracle Application Express, a low-code web development tool.
 - CDB: Container Database - Introduced in 12c, container databases introduce capacity and security enhancements. Each CDB consists of a root container plus one or more Pluggable Databases, or PDBs.
@@ -313,3 +577,13 @@ I recommend handling this as follows:
 - runInstall: Performs Oracle database software installation.
 - SE, SE2: Oracle Standard Edition/Oracle Standard Edition 2 - A licensed version of Oracle with limited features. Not all features are available, licensed, or extensive in SE/SE2. For example, partitioning is not available in SE/SE2, and RAC is limited to specific node/core counts.
 - XE: Oracle Express Edition - A limited version of the Oracle database that is free to use.
+
+## TODO:
+- Replace positional options with flags
+- Expand customizations
+- Add flexibility to pass `--build-arg`s to the script/image
+- Add a "Create Dockerfile" option (don't run the build)
+- Add Dockerfile naming capability
+- Add a help menu and error dialogs
+- Integrate secrets
+- More...

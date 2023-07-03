@@ -107,7 +107,7 @@ checkDirectory() {
 }
 
 getPreinstall() {
-    # Set the default RPM by version:
+  # Set the default RPM by version:
   case $1 in
        11*)   pre="oracle-rdbms-server-11gR2-preinstall unzip" ;;
        12.1*) pre="oracle-rdbms-server-12cR1-preinstall tar" ;;
@@ -115,12 +115,20 @@ getPreinstall() {
        18*)   pre="oracle-database-preinstall-18c" ;;
        19*)   pre="oracle-database-preinstall-19c" ;;
        21*)   pre="oracle-database-preinstall-21c" ;;
-       23*)   pre="oracle-database-preinstall-21c" ;;
-#       23*)   pre="oracle-database-preinstall-23c-1.0-1.el8.x86_64.rpm" ;;
+       23*)   curl -L -o oracle-database-preinstall-23c-1.0-0.5.el8.x86_64.rpm https://yum.oracle.com/repo/OracleLinux/OL8/developer/x86_64/getPackage/oracle-database-preinstall-23c-1.0-0.5.el8.x86_64.rpm
+              dnf -y localinstall oracle-database-preinstall-23c-1.0-0.5.el8.x86_64.rpm ;;
        *)     pre="oracle-database-preinstall-19c" ;;
   esac
 
-  export RPM_LIST="openssl $pre $RPM_LIST" 
+  # Set the EPEL release:
+  release=$(cat /etc/os-release | grep -e "^PLATFORM_ID" | sed -e 's/^.*://g' -e 's/"//g')
+
+  export RPM_LIST="openssl oracle-epel-release-$release $pre $RPM_LIST" 
+}
+
+getYum() {
+  # Get the correct package installer: yum, dnf, or microdnf:
+  YUM=$(command -v yum || command -v dnf || command -v microdnf)
 }
 
 configENV() {
@@ -134,18 +142,19 @@ configENV() {
   fi
 
   getPreinstall "$ORACLE_VERSION"
+  getYum
 
-  yum -y update
-  yum -y install $RPM_LIST
+  $YUM -y update
+  $YUM -y install $RPM_LIST
   sync
 
     if [ -n "$RPM_SUPPLEMENT" ]
-  then yum -y install $RPM_SUPPLEMENT
+  then $YUM -y install $RPM_SUPPLEMENT
   fi
 
   # Add option to add systemd support to the image (for AHF/TFA)
     if [ -n "$SYSTEMD" ]
-  then yum -y install systemd
+  then $YUM -y install systemd
        cd /lib/systemd/system/sysinit.target.wants
         for i in *
          do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i
@@ -158,7 +167,7 @@ configENV() {
        systemctl set-default multi-user.target
   fi
 
-  yum clean all
+  $YUM clean all
 
   mkdir -p {"$INSTALL_DIR","$SCRIPTS_DIR"} || error "Failure creating directories."
 }
@@ -198,7 +207,8 @@ setBase() {
 
 mkPass() {
   # Generate a random 16-character password; first character always alphanum, including one guaranteed special character:
-  echo "$(tr -dc '[:alnum:]' </dev/urandom | head -c 16)"
+#  echo "$(tr -dc '[:alnum:]' </dev/urandom | head -c 16)"
+  echo "$(</dev/urandom tr -dc '[[:alnum:]]' | head -c 2; (</dev/urandom tr -dc '0-9' | head -c 2; </dev/urandom tr -dc '#_\-' | head -c 2; </dev/urandom tr -dc 'A-Za-z0-9#_\-' | head -c 8) | fold -w1 | shuf | tr -d '\n')"
 }
 
 copyTemplate() {
@@ -243,7 +253,7 @@ downloadPatch() {
   then error "The MOS credential file doesn't exist"
   fi
   # Install curl if it isn't present.
-  command -v curl >/dev/null 2>&1 || yum install -y curl
+  command -v curl >/dev/null 2>&1 || getYum; $YUM install -y curl
 
   # Log in to MOS if there isn't already a cookie file.
     if [ ! -f "$__cookie" ]
@@ -283,7 +293,9 @@ installPatch() {
          if [ -f "$manifest" ]
        then manifest="$(find $INSTALL_DIR -maxdepth 1 -name "manifest*" 2>/dev/null)"
             # Allow manifest to hold version-specific (version = xx.yy) and generic patches (version = xx) and apply them in order.
-            grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\b${1}\b[[:blank:]]*\(${__major_version}[[:blank:]]\|${__minor_version}[[:blank:]]\)" $manifest | awk '{print $5,$2,$1}' | while read patchid install_file checksum
+            grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\b${1}\b[[:blank:]]*\(${__major_version}[[:blank:]]\|${__minor_version}[[:blank:]]\)" $manifest \
+                 | grep -i $(uname -m | sed -e 's/_/\./g' -e 's/-/\./g' -e 's/aarch64/arm64/g') \
+                 | awk '{print $5,$2,$1}' | while read patchid install_file checksum
                do
                   # If there's a credential file and either:
                   # ...the patch file isn't present
@@ -371,7 +383,7 @@ installOracle() {
             fi
        fi
 
-       yum -y localinstall $ORACLE_RPM
+       getYum; $YUM -y localinstall $ORACLE_RPM
 
        # Determine the name of the init file used for RPM installation
 #         if [ "$__version" == "11.2.0.2" ] && [ "$ORACLE_EDITION" != "XE" ]
@@ -426,7 +438,9 @@ installOracle() {
        # Some versions have multiple files that must be unzipped to the correct location prior to installation.
        # Loop over the manifest, retrieve the file and checksum values, unzip the installation files.
        set +e
-       grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\bdatabase\b.*${ORACLE_EDITION::2}" $manifest | awk '{print $1,$2}' | while read checksum install_file
+       grep -e "^[[:alnum:]].*\b.*\.zip[[:blank:]]*\bdatabase\b.*${ORACLE_EDITION::2}" $manifest \
+            | grep -i $(uname -m | sed -e 's/_/\./g' -e 's/-/\./g' -e 's/aarch64/arm64/g') \
+            | awk '{print $1,$2}' | while read checksum install_file
           do checkSum "$INSTALL_DIR/$install_file" "$checksum"
              case $ORACLE_VERSION in
                   18.*|19.*|2*) sudo su - oracle -c "unzip -oq -d $ORACLE_HOME $INSTALL_DIR/$install_file" ;;
@@ -585,65 +599,6 @@ stopDB() {
   fi
   runsql "shutdown immediate;"
   stopListener
-}
-
-checkMode() {
-  target_status=$(echo "$1" | sed "s/ /./g")
-  check=
-  while [[ ! $check =~ $target_status ]]
-     do check=$(echo "select open_mode from v\$database;" | "$ORACLE_HOME"/bin/sqlplus -S / as sysdba) 2>/dev/null
-          if ! [[ $check =~ $target_status ]]
-        then echo "Database $DB_UNQNAME is not online; sleeping."
-             sleep 180
-        else echo "Database $DB_UNQNAME is online."
-        fi
-   done
-}
-
-setupDG() {
-  dbrole=$1
-  local __version=$(echo "$ORACLE_VERSION" | cut -d. -f1)
-  setBase
-    if [ "$dbrole" = "PRIMARY" ]
-  then "$ORACLE_HOME"/bin/sqlplus / as sysdba @"$SETUP_DIR"/"$SETUP_PRIMARY".sql
-        for duplicate in $(find "$SETUP_DIR"/"$RMAN_DUPLICATE".*.rman)
-         do cs="$(head -1 "$duplicate" | awk '{print $NF}')"
-            "$ORACLE_HOME"/bin/rman target sys/"$ORACLE_PWD"@"$DB_UNQNAME" cmdfile "$duplicate" log /tmp/duplicate.out
-            # Open standby database read only
-              if [ "$(grep -c farsync "$duplicate")" -eq 0 ]
-            then echo "alter database open read only;" | "$ORACLE_HOME"/bin/sqlplus "$cs" as sysdba
-            fi
-       done
-       cat "$SETUP_DIR"/"$BROKER_SCRIPT" | "$ORACLE_HOME"/bin/dgmgrl /
-       sleep 60
-       cat "$SETUP_DIR"/"$BROKER_CHECKS" | "$ORACLE_HOME"/bin/dgmgrl /
-  else mkdir -p "$ORADATA"/"$ORACLE_SID"
-       mkdir -p "$ORACLE_BASE"/fast_recovery_area/"$ORACLE_SID"
-       createAudit "$DB_UNQNAME"
-       mkdir -p "$ORACLE_BASE"/diag/rdbms/"${DB_UNQNAME,,}"/"$ORACLE_SID"/trace
-       touch "$ORACLE_BASE"/diag/rdbms/"${DB_UNQNAME,,}"/"$ORACLE_SID"/trace/alert_"$ORACLE_SID".log
-       printf "%s:%s:N\n" "$ORACLE_SID" "$ORACLE_HOME" > /etc/oratab
-       # Create a pfile for startup of the DG replica
-       copyTemplate "$INSTALL_DIR"/init.ora.tmpl "$ORACLE_BASE_CONFIG"/init"$ORACLE_SID".ora replace
-       # Create a password file
-       case "$__version" in
-            11) __option="force=y" ;;
-            *)  __option="force=yes format=12" ;;
-       esac
-       "$ORACLE_HOME"/bin/orapwd file="$ORACLE_BASE_CONFIG"/orapw"$ORACLE_SID" "$__option" <<< $(echo "$ORACLE_PWD")
-       echo "startup nomount pfile='${ORACLE_BASE_CONFIG}/init${ORACLE_SID}.ora';" | "$ORACLE_HOME"/bin/sqlplus / as sysdba
-       # Start listener
-       startListener
-       # Wait for the database to come online
-         if [ "$OPEN_MODE" = "MOUNT" ]
-       then checkMode "MOUNT"
-       else checkMode "READ ONLY"
-            # Open managed for managed apply
-              if [ "$OPEN_MODE" = "APPLY" ]
-            then runsql "alter database recover managed standby database disconnect from session;"
-            fi
-       fi
-  fi
 }
 
 runDBCA() {
@@ -1041,13 +996,13 @@ fi
 
 # Check whether container has enough memory
   if [ -f /sys/fs/cgroup/cgroup.controllers ]
-then __mem=$(cat /sys/fs/cgroup/memory.high)
+then __mem=$(cat /sys/fs/cgroup/memory.max)
 else __mem=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
 fi
 
   if [ -z "$__mem" ]
 then error "There was a problem getting the cgroups memory limit on the system"
-elif [ "${#__mem}" -lt 11 ] && [ "$__mem" -lt 2147483648 ]
+elif [ "${__mem}" != "max" ] && [ "${#__mem}" -lt 11 ] && [ "$__mem" -lt 2147483648 ]
 then error "The database container requires at least 2GB of memory; only $__mem is available"
 fi
 
@@ -1133,7 +1088,6 @@ else # Create the TNS configuration
      # Create a database password if none exists
        if [ -z "$ORACLE_PWD" ]
      then export ORACLE_PWD="$(mkPass)"
-          # ORACLE_PWD=$(openssl rand -base64 8)1; export ORACLE_PWD
           logger BA "Oracle password for SYS, SYSTEM and PDBADMIN: $ORACLE_PWD"
      fi
 
@@ -1149,15 +1103,8 @@ else # Create the TNS configuration
      then copyTemplate "$INSTALL_DIR"/login.sql.tmpl "$ORACLE_PATH"/login.sql replace
      fi
 
-     # Run DBCA if this is a standalone database or primary in a Data Guard configuration
-       if [ -z "$ROLE" ]
-     then runDBCA
-     elif [ "$ROLE" = "PRIMARY" ]
-     then runDBCA
-          setupDG "$ROLE"
-     else setupDG "$ROLE"
-     fi
-
+     # Run DBCA
+     runDBCA
      moveFiles
      runUserScripts "$ORACLE_BASE"/scripts/setup
 fi

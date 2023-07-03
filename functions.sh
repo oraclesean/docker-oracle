@@ -54,7 +54,7 @@ replaceVars() {
   then local __val="$(eval echo "\$$(echo "$__var")")"
   else local __val="$3"
   fi
-  sed -i -e "s|###${__var}###|"${__val}"|g" "$__file"
+  sed -i '' -e "s|###${__var}###|"${__val}"|g" "$__file"
 }
 
 checkSum() {

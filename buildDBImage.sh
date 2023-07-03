@@ -1,9 +1,9 @@
 # Automate dynamic image builds
 
 # Set defaults for version, edition, tag and source:
-ORACLE_VERSION=${1:-19.14}
+ORACLE_VERSION=${1:-19.19}
 ORACLE_EDITION=${2:-EE}
-TAG=${3:-7-slim}
+TAG=${3:-8-slim}
 SOURCE=${4:-oraclelinux}
 DB_REPO=${5:-oraclesean/db}
 MOS_SECRET=${6:-$PWD/config/.netrc}
@@ -150,26 +150,27 @@ addException() {
 }
 
 processManifest() {
-#    if [ -f ./config/manifest."$ORACLE_BASE_VERSION" ]
     if [ -f ./config/manifest ]
   then
-#       grep -ve "^#" ./config/manifest."$ORACLE_BASE_VERSION" | awk '{print $1,$2,$3,$4,$5}' | while IFS=" " read -r checksum filename filetype version extra
-       grep -ve "^#" ./config/manifest | awk '{print $1,$2,$3,$4,$5}' | while IFS=" " read -r checksum filename filetype version extra
+       # Get the correct architecture.
+       # Use `uname -m | sed -e 's/_/\./g' -e 's/-/\./g'` replaces underscores (_) and dashes (-)
+       # with the wildcard and matches both "x86_64" and "x86-64".
+       grep -i $(uname -m | sed -e 's/_/\./g' -e 's/-/\./g') ./config/manifest | grep -ve "^#" | awk '{print $1,$2,$3,$4,$5}' | while IFS=" " read -r checksum filename filetype version extra
           do
                if [ "$filetype" == "database" ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/"$filename" ] && [ -z "$edition" ]
              then case $1 in
                   ignore) addException $filename database ;;
-                  label)  sed -i -e "/^###SOFTWARE_LABEL###/i LABEL database.software.${version}=\"Edition=${extra}, Version=${version}, File=${filename}, md5sum=${checksum}\"\n" $dockerfile ;;
+                  label)  sed -i '' -e "s/^###SOFTWARE_LABEL###/&\nLABEL database.software.${version}=\"Edition=${extra}, Version=${version}, File=${filename}, md5sum=${checksum}\"\n/" $dockerfile ;;
                   esac
              elif [ "$filetype" == "database" ] && [ "$version" == "$ORACLE_BASE_VERSION" ] && [ -f ./database/"$filename" ] && [[ $edition =~ $ORACLE_EDITION ]]
              then case $1 in
                   ignore) addException $filename database ;;
-                  label)  sed -i -e "/^###SOFTWARE_LABEL###/i LABEL database.software.${version}=\"Edition=${extra}, Version=${version}, File=${filename}, md5sum=${checksum}\"\n" $dockerfile ;;
+                  label)  sed -i '' -e "s/^###SOFTWARE_LABEL###/&\nLABEL database.software.${version}=\"Edition=${extra}, Version=${version}, File=${filename}, md5sum=${checksum}\"\n/" $dockerfile ;;
                   esac
              elif [ "$filetype" == "opatch" -o "$filetype" == "patch" ] && [ "$version" == "$ORACLE_BASE_VERSION" -o "$version" == "$ORACLE_VERSION" ] && [ -f ./database/patches/"$filename" ]
              then case $1 in
                   ignore) addException $filename patch ;;
-                  label)  sed -i -e "/^###SOFTWARE_LABEL###/i LABEL database.patch.${extra}=\"Patch ID=${extra}, Version=${version}, File=${filename}, md5sum=${checksum}\"\n" $dockerfile ;;
+                  label)  sed -i '' -e "s/^###SOFTWARE_LABEL###/&\nLABEL database.patch.${extra}=\"Patch ID=${extra}, Version=${version}, File=${filename}, md5sum=${checksum}\"\n/" $dockerfile ;;
                   esac
              fi
         done
@@ -213,7 +214,7 @@ processDockerfile() {
   processManifest label
 
   # Remove unset lines
-  sed -i -e '/###$/d' $1
+  sed -i '' -e '/###$/d' $1
 }
 
 getVersion
@@ -221,8 +222,8 @@ getEdition
 setBuildKit
 
 # Set build options
-#options="--force-rm=true --no-cache=true" # --progress=plain
-options="--force-rm=true --no-cache=true --progress=plain"
+options="--force-rm=true --no-cache=true"
+#options="--force-rm=true --no-cache=true --progress=plain"
 
 # Set build arguments
 arguments=""
